@@ -19,8 +19,8 @@ const chapterSchema = new mongoose.Schema({
     contents: [{
         type: { type: String, enum: ['PDF', 'GBP_PDF', 'TEXT'], required: true },
         title: { type: String, required: true },
-        url: { type: String }, // For PDF and GBP_PDF
-        text: { type: String }, // For TEXT type
+        url: { type: String }, // For PDF and GBP_PDF (file URL)
+        text: { type: String }, // For TEXT type or extracted PDF content
     }]
 }, { timestamps: true });
 

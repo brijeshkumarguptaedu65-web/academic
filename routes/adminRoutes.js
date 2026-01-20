@@ -77,6 +77,7 @@ router.put('/chapters/:id', updateChapter);
 router.delete('/chapters/:id', deleteChapter);
 
 // 2.5.1 Chapter Content
+// Support both file upload (multipart/form-data) and manual entry (application/json)
 router.post('/chapters/:chapterId/content', upload.single('file'), addChapterContent);
 router.delete('/chapters/:chapterId/content/:contentId', deleteChapterContent);
 

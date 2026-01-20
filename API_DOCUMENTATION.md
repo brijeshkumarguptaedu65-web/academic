@@ -540,11 +540,16 @@ Authorization: Bearer <token>
 **Headers:**
 ```
 Authorization: Bearer <token>
-Content-Type: multipart/form-data
+Content-Type: multipart/form-data (for file upload) OR application/json (for manual entry)
 ```
 
 **URL Parameters:**
 - `chapterId` (string): Chapter ID
+
+**Two Methods Available:**
+
+#### Method 1: File Upload (with automatic PDF extraction)
+**Content-Type:** `multipart/form-data`
 
 **Request Body (FormData):**
 - `type` (string, required): `"PDF"` | `"GBP_PDF"` | `"TEXT"`
@@ -552,7 +557,7 @@ Content-Type: multipart/form-data
 - `file` (File, required if type is `PDF` or `GBP_PDF`): File upload
 - `text` (string, required if type is `TEXT`): Text content
 
-**Example (PDF):**
+**Example (PDF with file upload - text will be auto-extracted):**
 ```javascript
 const formData = new FormData();
 formData.append('type', 'PDF');
@@ -560,7 +565,7 @@ formData.append('title', 'Chapter PDF');
 formData.append('file', fileObject);
 ```
 
-**Example (TEXT):**
+**Example (TEXT with file upload):**
 ```javascript
 const formData = new FormData();
 formData.append('type', 'TEXT');
@@ -568,7 +573,41 @@ formData.append('title', 'Text Content');
 formData.append('text', 'Full text content here...');
 ```
 
-**Response:** Created content object
+#### Method 2: Manual Entry (without file upload)
+**Content-Type:** `application/json`
+
+**Request Body (JSON):**
+- `type` (string, required): `"PDF"` | `"GBP_PDF"` | `"TEXT"`
+- `title` (string, required): Content title
+- `url` (string, required for PDF/GBP_PDF if no file): URL to the PDF file
+- `text` (string, required for TEXT type OR optional for PDF types): Text content
+
+**Example (PDF with manual URL entry):**
+```json
+{
+  "type": "PDF",
+  "title": "Chapter PDF",
+  "url": "https://example.com/chapter.pdf",
+  "text": "Optional: Manually entered text content"
+}
+```
+
+**Example (TEXT manual entry):**
+```json
+{
+  "type": "TEXT",
+  "title": "Text Content",
+  "text": "Full text content here..."
+}
+```
+
+**Response:** Created content object with `extractedTextLength` (if PDF was uploaded and parsed) and `isManualEntry` flag
+
+**Notes:**
+- For PDF types: Either `file` (upload) OR `url` (manual) is required
+- When a PDF file is uploaded, text content is automatically extracted and saved
+- For manual PDF entry, you can optionally provide `text` field with manually entered content
+- For TEXT type: `text` field is always required
 
 ### Delete Chapter Content
 **Endpoint:** `DELETE https://academic-7mkg.onrender.com/api/admin/chapters/:chapterId/content/:contentId`

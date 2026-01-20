@@ -1,5 +1,6 @@
 const Chapter = require('../models/Chapter');
 const Remedial = require('../models/Remedial');
+const pdfParse = require('pdf-parse');
 
 // --- 2.5 Chapter Management ---
 const getChapters = async (req, res) => {
@@ -84,7 +85,7 @@ const deleteChapter = async (req, res) => {
 const addChapterContent = async (req, res) => {
     try {
         const { chapterId } = req.params;
-        const { type, title, text } = req.body;
+        const { type, title, text, url: manualUrl } = req.body;
         
         if (!type || !title) {
             return res.status(400).json({ message: 'type and title are required' });
@@ -100,35 +101,71 @@ const addChapterContent = async (req, res) => {
             return res.status(400).json({ message: 'type must be PDF, GBP_PDF, or TEXT' });
         }
 
-        // For PDF types, require file upload
-        if ((type === 'PDF' || type === 'GBP_PDF') && !req.file) {
-            return res.status(400).json({ message: 'file is required for PDF types' });
-        }
-
         // For TEXT type, require text content
         if (type === 'TEXT' && !text) {
             return res.status(400).json({ message: 'text is required for TEXT type' });
         }
 
+        // For PDF types: allow either file upload OR manual URL entry
+        if ((type === 'PDF' || type === 'GBP_PDF') && !req.file && !manualUrl) {
+            return res.status(400).json({ 
+                message: 'For PDF types, either file upload or URL is required' 
+            });
+        }
+
         let url = null;
+        let extractedText = null;
+        let finalText = null;
+
+        // Handle file upload (if provided)
         if (req.file) {
             // In production, upload to S3/Cloudinary and get URL
             // For now, simulate URL
             url = `https://storage.example.com/${req.file.originalname}`;
+
+            // Extract text content from PDF
+            if (type === 'PDF' || type === 'GBP_PDF') {
+                try {
+                    const pdfData = await pdfParse(req.file.buffer);
+                    extractedText = pdfData.text;
+                    console.log(`Extracted ${extractedText.length} characters from PDF: ${req.file.originalname}`);
+                } catch (pdfError) {
+                    console.error('Error parsing PDF:', pdfError);
+                    // Continue even if PDF parsing fails - we still save the URL
+                    extractedText = null;
+                }
+            }
+        } else {
+            // Manual entry: use provided URL
+            url = manualUrl;
+        }
+
+        // Determine final text content:
+        // 1. For TEXT type: use provided text
+        // 2. For PDF types: use extracted text (if file uploaded) OR manually provided text (if manual entry)
+        if (type === 'TEXT') {
+            finalText = text;
+        } else {
+            // PDF/GBP_PDF: prefer extracted text, fallback to manually provided text
+            finalText = extractedText || text || undefined;
         }
 
         const contentItem = {
             type,
             title,
-            url: url || req.body.url,
-            text: type === 'TEXT' ? text : undefined
+            url: url || undefined,
+            text: finalText
         };
 
         chapter.contents.push(contentItem);
         await chapter.save();
 
         const addedContent = chapter.contents[chapter.contents.length - 1];
-        res.status(201).json(addedContent);
+        res.status(201).json({
+            ...addedContent.toObject(),
+            extractedTextLength: extractedText ? extractedText.length : undefined,
+            isManualEntry: !req.file && !!manualUrl
+        });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
