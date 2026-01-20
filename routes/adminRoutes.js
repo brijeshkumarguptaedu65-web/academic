@@ -12,9 +12,12 @@ const {
     updateBasicTestConfig,
     getClasses,
     createClass,
+    updateClass,
     deleteClass,
     getSubjects,
     createSubject,
+    updateSubject,
+    deleteSubject,
     getTopics,
     createTopic,
     updateTopic,
@@ -26,11 +29,20 @@ const {
     getChapters,
     createChapter,
     updateChapter,
-    uploadChapterPdf,
+    deleteChapter,
+    addChapterContent,
+    deleteChapterContent,
     getRemedials,
     addRemedial,
     deleteRemedialItem
 } = require('../controllers/adminChapterController');
+
+const {
+    getTests,
+    createTest,
+    updateTest,
+    deleteTest
+} = require('../controllers/adminTestController');
 
 // All routes protected + admin only
 router.use(protect, admin);
@@ -42,11 +54,14 @@ router.put('/config/basic-test', updateBasicTestConfig);
 // 2.2 Classes
 router.get('/classes', getClasses);
 router.post('/classes', createClass);
+router.put('/classes/:id', updateClass);
 router.delete('/classes/:id', deleteClass);
 
 // 2.3 Subjects
 router.get('/subjects', getSubjects);
 router.post('/subjects', createSubject);
+router.put('/subjects/:id', updateSubject);
+router.delete('/subjects/:id', deleteSubject);
 
 // 2.4 Topics
 router.get('/topics', getTopics);
@@ -59,11 +74,22 @@ router.get('/topics/:id/chain-preview', getTopicChainPreview);
 router.get('/chapters', getChapters);
 router.post('/chapters', createChapter);
 router.put('/chapters/:id', updateChapter);
-router.post('/chapters/:id/upload-pdf', upload.single('file'), uploadChapterPdf);
+router.delete('/chapters/:id', deleteChapter);
+
+// 2.5.1 Chapter Content
+router.post('/chapters/:chapterId/content', upload.single('file'), addChapterContent);
+router.delete('/chapters/:chapterId/content/:contentId', deleteChapterContent);
 
 // 2.6 Remedials
-router.get('/chapters/:chapterId/remedials', getRemedials);
-router.post('/chapters/:chapterId/remedials', addRemedial);
-router.delete('/remedials/:remedialId', deleteRemedialItem);
+router.get('/chapters/:chapterId/remedial', getRemedials);
+router.post('/chapters/:chapterId/remedial', addRemedial);
+router.delete('/chapters/:chapterId/remedial/:remedialId', deleteRemedialItem);
+router.delete('/remedials/:remedialId', deleteRemedialItem); // Alternative endpoint
+
+// 2.7 Tests
+router.get('/tests', getTests);
+router.post('/tests', createTest);
+router.put('/tests/:id', updateTest);
+router.delete('/tests/:id', deleteTest);
 
 module.exports = router;

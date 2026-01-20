@@ -48,6 +48,23 @@ const createClass = async (req, res) => {
     }
 };
 
+const updateClass = async (req, res) => {
+    try {
+        const { name, level } = req.body;
+        const updatedClass = await Class.findByIdAndUpdate(
+            req.params.id,
+            { name, level },
+            { new: true }
+        );
+        if (!updatedClass) {
+            return res.status(404).json({ message: 'Class not found' });
+        }
+        res.json(updatedClass);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
 const deleteClass = async (req, res) => {
     try {
         await Class.findByIdAndDelete(req.params.id);
@@ -69,11 +86,37 @@ const getSubjects = async (req, res) => {
 
 const createSubject = async (req, res) => {
     try {
-        const { name } = req.body;
-        const subject = await Subject.create({ name });
+        const { name, classId } = req.body;
+        const subject = await Subject.create({ name, classId });
         res.status(201).json(subject);
     } catch (err) {
         res.status(400).json({ message: err.message });
+    }
+};
+
+const updateSubject = async (req, res) => {
+    try {
+        const { name, classId } = req.body;
+        const updatedSubject = await Subject.findByIdAndUpdate(
+            req.params.id,
+            { name, classId },
+            { new: true }
+        );
+        if (!updatedSubject) {
+            return res.status(404).json({ message: 'Subject not found' });
+        }
+        res.json(updatedSubject);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
+const deleteSubject = async (req, res) => {
+    try {
+        await Subject.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Subject removed' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 };
 
@@ -158,9 +201,12 @@ module.exports = {
     updateBasicTestConfig,
     getClasses,
     createClass,
+    updateClass,
     deleteClass,
     getSubjects,
     createSubject,
+    updateSubject,
+    deleteSubject,
     getTopics,
     createTopic,
     updateTopic,

@@ -6,7 +6,8 @@ const classSchema = new mongoose.Schema({
 });
 
 const subjectSchema = new mongoose.Schema({
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class' }, // Optional
 });
 
 const topicSchema = new mongoose.Schema({

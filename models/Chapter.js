@@ -16,6 +16,12 @@ const chapterSchema = new mongoose.Schema({
         }
     },
     pdfUrl: { type: String }, // URL to uploaded PDF
+    contents: [{
+        type: { type: String, enum: ['PDF', 'GBP_PDF', 'TEXT'], required: true },
+        title: { type: String, required: true },
+        url: { type: String }, // For PDF and GBP_PDF
+        text: { type: String }, // For TEXT type
+    }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('Chapter', chapterSchema);
