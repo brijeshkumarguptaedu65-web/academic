@@ -4,6 +4,7 @@ const LearningOutcome = require('../models/LearningOutcome');
 const getLearningOutcomes = async (req, res) => {
     try {
         const { classId, subjectId, type } = req.query;
+        const LearningOutcomeRemedial = require('../models/LearningOutcomeRemedial');
 
         if (!classId || !type) {
             return res.status(400).json({ 
@@ -39,14 +40,24 @@ const getLearningOutcomes = async (req, res) => {
             .populate('subjectId', 'name')
             .sort({ createdAt: -1 });
 
-        // Format response
-        const formattedOutcomes = outcomes.map(outcome => {
-            const obj = outcome.toObject();
-            obj.id = obj._id;
-            return obj;
-        });
+        // Add remedials to each outcome
+        const outcomesWithRemedials = await Promise.all(
+            outcomes.map(async (outcome) => {
+                const obj = outcome.toObject();
+                obj.id = obj._id;
+                obj.contents = obj.contents || [];
+                
+                // Get remedials
+                const remedial = await LearningOutcomeRemedial.findOne({ 
+                    learningOutcomeId: outcome._id 
+                });
+                obj.remedials = remedial ? remedial.items : [];
+                
+                return obj;
+            })
+        );
 
-        res.json(formattedOutcomes);
+        res.json(outcomesWithRemedials);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

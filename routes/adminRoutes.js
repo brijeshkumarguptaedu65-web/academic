@@ -56,6 +56,15 @@ const {
     saveInstructions
 } = require('../controllers/adminInstructionController');
 
+const {
+    addLearningOutcomeContent,
+    deleteLearningOutcomeContent,
+    getLearningOutcomeContent,
+    getLearningOutcomeRemedials,
+    addLearningOutcomeRemedial,
+    deleteLearningOutcomeRemedialItem
+} = require('../controllers/adminLearningOutcomeContentController');
+
 // All routes protected + admin only
 router.use(protect, admin);
 
@@ -110,6 +119,17 @@ router.get('/learning-outcomes', getLearningOutcomes);
 router.post('/learning-outcomes', createLearningOutcome);
 router.put('/learning-outcomes/:id', updateLearningOutcome);
 router.delete('/learning-outcomes/:id', deleteLearningOutcome);
+
+// 2.8.1 Learning Outcome Content
+router.get('/learning-outcomes/:learningOutcomeId/content', getLearningOutcomeContent);
+router.post('/learning-outcomes/:learningOutcomeId/content', upload.single('file'), addLearningOutcomeContent);
+router.delete('/learning-outcomes/:learningOutcomeId/content/:contentId', deleteLearningOutcomeContent);
+
+// 2.8.2 Learning Outcome Remedials
+router.get('/learning-outcomes/:learningOutcomeId/remedial', getLearningOutcomeRemedials);
+router.post('/learning-outcomes/:learningOutcomeId/remedial', addLearningOutcomeRemedial);
+router.delete('/learning-outcomes/:learningOutcomeId/remedial/:remedialId', deleteLearningOutcomeRemedialItem);
+router.delete('/learning-outcome-remedials/:remedialId', deleteLearningOutcomeRemedialItem); // Alternative endpoint
 
 // 2.9 Instructions
 router.get('/instructions', getInstructions);

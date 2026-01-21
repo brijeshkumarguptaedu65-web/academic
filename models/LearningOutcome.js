@@ -20,7 +20,13 @@ const learningOutcomeSchema = new mongoose.Schema({
         }
     },
     topicName: { type: String }, // Used for curriculum mapping
-    instruction: { type: String } // Additional guidance
+    instruction: { type: String }, // Additional guidance
+    contents: [{
+        type: { type: String, enum: ['PDF', 'GBP_PDF', 'TEXT'], required: true },
+        title: { type: String, required: true },
+        url: { type: String }, // For PDF and GBP_PDF (file URL)
+        text: { type: String }, // For TEXT type or extracted PDF content
+    }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('LearningOutcome', learningOutcomeSchema);

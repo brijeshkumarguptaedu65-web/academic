@@ -1045,7 +1045,24 @@ GET /api/admin/learning-outcomes?classId=class_id_1&subjectId=subject_id_1&type=
       "name": "Mathematics"
     },
     "topicName": "Geometry",
-    "instruction": "Focus on shapes and angles"
+    "instruction": "Focus on shapes and angles",
+    "contents": [
+      {
+        "_id": "content_id_1",
+        "type": "PDF",
+        "title": "Geometry PDF",
+        "url": "https://storage.example.com/file.pdf",
+        "text": "Extracted PDF text content..."
+      }
+    ],
+    "remedials": [
+      {
+        "_id": "remedial_id_1",
+        "type": "VIDEO",
+        "title": "Video Tutorial",
+        "content": "https://youtube.com/watch?v=..."
+      }
+    ]
   }
 ]
 ```
@@ -1226,6 +1243,417 @@ Authorization: Bearer <token>
 {
   "message": "Learning outcome removed"
 }
+```
+
+---
+
+### 8.5 Get Learning Outcome Content
+
+**Endpoint:** `GET https://academic-7mkg.onrender.com/api/admin/learning-outcomes/:learningOutcomeId/content`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `learningOutcomeId` (string, required): Learning Outcome ID
+
+**Query Parameters:** None
+
+**Response (200 OK):**
+```json
+{
+  "learningOutcome": {
+    "id": "outcome_id_1",
+    "text": "Students will be able to solve basic geometry problems",
+    "type": "SUBJECT",
+    "topicName": "Geometry"
+  },
+  "contents": [
+    {
+      "_id": "content_id_1",
+      "type": "PDF",
+      "title": "Geometry PDF",
+      "url": "https://storage.example.com/file.pdf",
+      "text": "Extracted PDF text content..."
+    },
+    {
+      "_id": "content_id_2",
+      "type": "TEXT",
+      "title": "Text Content",
+      "text": "Full text content here..."
+    }
+  ]
+}
+```
+
+**Example:**
+```javascript
+const learningOutcomeId = "outcome_id_1";
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/content`, {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  }
+});
+const data = await response.json();
+console.log('Contents:', data.contents);
+console.log('Extracted text from first PDF:', data.contents[0]?.text);
+```
+
+---
+
+### 8.6 Add Learning Outcome Content
+
+**Endpoint:** `POST https://academic-7mkg.onrender.com/api/admin/learning-outcomes/:learningOutcomeId/content`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: multipart/form-data (for file upload) OR application/json (for manual entry)
+```
+
+**URL Parameters:**
+- `learningOutcomeId` (string, required): Learning Outcome ID
+
+**Two Methods Available:**
+
+#### Method 1: File Upload (with automatic PDF extraction)
+**Content-Type:** `multipart/form-data`
+
+**Request Body (FormData):**
+- `type` (string, required): `"PDF"` | `"GBP_PDF"` | `"TEXT"`
+- `title` (string, required): Content title
+- `file` (File, required if type is `PDF` or `GBP_PDF`): File upload
+- `text` (string, required if type is `TEXT`): Text content
+
+**Example (PDF with file upload - text will be auto-extracted):**
+```javascript
+const formData = new FormData();
+formData.append('type', 'PDF');
+formData.append('title', 'Learning Outcome PDF');
+formData.append('file', fileObject);
+
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/content`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+    // Don't set Content-Type header - browser will set it with boundary
+  },
+  body: formData
+});
+```
+
+**Example (TEXT with file upload):**
+```javascript
+const formData = new FormData();
+formData.append('type', 'TEXT');
+formData.append('title', 'Text Content');
+formData.append('text', 'Full text content here...');
+
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/content`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  },
+  body: formData
+});
+```
+
+#### Method 2: Manual Entry (without file upload)
+**Content-Type:** `application/json`
+
+**Request Body (JSON):**
+- `type` (string, required): `"PDF"` | `"GBP_PDF"` | `"TEXT"`
+- `title` (string, required): Content title
+- `url` (string, required for PDF/GBP_PDF if no file): URL to the PDF file
+- `text` (string, required for TEXT type OR optional for PDF types): Text content
+
+**Example (PDF with manual URL entry):**
+```json
+{
+  "type": "PDF",
+  "title": "Learning Outcome PDF",
+  "url": "https://example.com/outcome.pdf",
+  "text": "Optional: Manually entered text content"
+}
+```
+
+**Example (TEXT manual entry):**
+```json
+{
+  "type": "TEXT",
+  "title": "Text Content",
+  "text": "Full text content here..."
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "_id": "content_id_1",
+  "type": "PDF",
+  "title": "Learning Outcome PDF",
+  "url": "https://storage.example.com/file.pdf",
+  "text": "Extracted PDF text content...",
+  "extractedTextLength": 5000,
+  "isManualEntry": false
+}
+```
+
+**Notes:**
+- For PDF types: Either `file` (upload) OR `url` (manual) is required
+- When a PDF file is uploaded, text content is automatically extracted and saved
+- For manual PDF entry, you can optionally provide `text` field with manually entered content
+- For TEXT type: `text` field is always required
+- You can add multiple content items (PDF and TEXT) to the same learning outcome
+
+---
+
+### 8.7 Delete Learning Outcome Content
+
+**Endpoint:** `DELETE https://academic-7mkg.onrender.com/api/admin/learning-outcomes/:learningOutcomeId/content/:contentId`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `learningOutcomeId` (string, required): Learning Outcome ID
+- `contentId` (string, required): Content ID
+
+**Response (200 OK):**
+```json
+{
+  "message": "Content removed"
+}
+```
+
+**Example:**
+```javascript
+const learningOutcomeId = "outcome_id_1";
+const contentId = "content_id_1";
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/content/${contentId}`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  }
+});
+```
+
+---
+
+### 8.8 Get Remedials for Learning Outcome
+
+**Endpoint:** `GET https://academic-7mkg.onrender.com/api/admin/learning-outcomes/:learningOutcomeId/remedial`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `learningOutcomeId` (string, required): Learning Outcome ID
+
+**Query Parameters:** None
+
+**Response (200 OK):**
+```json
+[
+  {
+    "_id": "remedial_id_1",
+    "type": "VIDEO",
+    "title": "Video Tutorial",
+    "content": "https://youtube.com/watch?v=..."
+  },
+  {
+    "_id": "remedial_id_2",
+    "type": "PDF",
+    "title": "Practice PDF",
+    "content": "https://example.com/practice.pdf"
+  },
+  {
+    "_id": "remedial_id_3",
+    "type": "LINK",
+    "title": "Reference Link",
+    "content": "https://example.com/reference"
+  }
+]
+```
+
+**Example:**
+```javascript
+const learningOutcomeId = "outcome_id_1";
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/remedial`, {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  }
+});
+const remedials = await response.json();
+```
+
+---
+
+### 8.9 Add Remedial Content to Learning Outcome
+
+**Endpoint:** `POST https://academic-7mkg.onrender.com/api/admin/learning-outcomes/:learningOutcomeId/remedial`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**URL Parameters:**
+- `learningOutcomeId` (string, required): Learning Outcome ID
+
+**Request Body:**
+```json
+{
+  "type": "VIDEO",
+  "title": "Video Tutorial",
+  "content": "https://youtube.com/watch?v=..."
+}
+```
+
+**Required Fields:**
+- `type` (string, required): `"VIDEO"` | `"PDF"` | `"LINK"`
+- `title` (string, required): Remedial title
+- `content` (string, required): URL or content string
+
+**Type Values:**
+- `"VIDEO"` - Video content (YouTube URL, etc.)
+- `"PDF"` - PDF document URL
+- `"LINK"` - External link URL
+
+**Response (201 Created):**
+```json
+{
+  "_id": "remedial_id_1",
+  "type": "VIDEO",
+  "title": "Video Tutorial",
+  "content": "https://youtube.com/watch?v=..."
+}
+```
+
+**Example:**
+```javascript
+const learningOutcomeId = "outcome_id_1";
+
+// Add YouTube video
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/remedial`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    type: 'VIDEO',
+    title: 'Video Tutorial',
+    content: 'https://youtube.com/watch?v=...'
+  })
+});
+
+// Add PDF document
+const response2 = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/remedial`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    type: 'PDF',
+    title: 'Practice PDF',
+    content: 'https://example.com/practice.pdf'
+  })
+});
+
+// Add reference link
+const response3 = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/remedial`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    type: 'LINK',
+    title: 'Reference Link',
+    content: 'https://example.com/reference'
+  })
+});
+```
+
+**Note:** For batch uploads, call this endpoint multiple times (frontend queues items and processes sequentially).
+
+---
+
+### 8.10 Delete Remedial Content from Learning Outcome
+
+**Endpoint:** `DELETE https://academic-7mkg.onrender.com/api/admin/learning-outcomes/:learningOutcomeId/remedial/:remedialId`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `learningOutcomeId` (string, required): Learning Outcome ID
+- `remedialId` (string, required): Remedial ID
+
+**Response (200 OK):**
+```json
+{
+  "message": "Remedial item removed"
+}
+```
+
+**Example:**
+```javascript
+const learningOutcomeId = "outcome_id_1";
+const remedialId = "remedial_id_1";
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcomes/${learningOutcomeId}/remedial/${remedialId}`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  }
+});
+```
+
+---
+
+### 8.11 Delete Remedial Item (Alternative Endpoint)
+
+**Endpoint:** `DELETE https://academic-7mkg.onrender.com/api/admin/learning-outcome-remedials/:remedialId`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**URL Parameters:**
+- `remedialId` (string, required): Remedial ID
+
+**Response (200 OK):**
+```json
+{
+  "message": "Remedial item removed"
+}
+```
+
+**Note:** This is an alternative endpoint for deleting remedials without specifying the learning outcome ID.
+
+**Example:**
+```javascript
+const remedialId = "remedial_id_1";
+const response = await fetch(`https://academic-7mkg.onrender.com/api/admin/learning-outcome-remedials/${remedialId}`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  }
+});
 ```
 
 ---
