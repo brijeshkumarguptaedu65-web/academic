@@ -44,6 +44,18 @@ const {
     deleteTest
 } = require('../controllers/adminTestController');
 
+const {
+    getLearningOutcomes,
+    createLearningOutcome,
+    updateLearningOutcome,
+    deleteLearningOutcome
+} = require('../controllers/adminLearningOutcomeController');
+
+const {
+    getInstructions,
+    saveInstructions
+} = require('../controllers/adminInstructionController');
+
 // All routes protected + admin only
 router.use(protect, admin);
 
@@ -92,5 +104,15 @@ router.get('/tests', getTests);
 router.post('/tests', createTest);
 router.put('/tests/:id', updateTest);
 router.delete('/tests/:id', deleteTest);
+
+// 2.8 Learning Outcomes
+router.get('/learning-outcomes', getLearningOutcomes);
+router.post('/learning-outcomes', createLearningOutcome);
+router.put('/learning-outcomes/:id', updateLearningOutcome);
+router.delete('/learning-outcomes/:id', deleteLearningOutcome);
+
+// 2.9 Instructions
+router.get('/instructions', getInstructions);
+router.post('/instructions', saveInstructions);
 
 module.exports = router;

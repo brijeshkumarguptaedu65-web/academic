@@ -17,7 +17,7 @@ const testSchema = new mongoose.Schema({
     },
     bloomsTaxonomy: [{
         type: String,
-        enum: ['REMEMBER', 'UNDERSTAND', 'APPLY', 'ANALYZE', 'EVALUATE', 'CREATE']
+        enum: ['REMEMBER', 'UNDERSTAND', 'APPLY', 'BASIC_CALCULATION', 'ANALYZE', 'EVALUATE', 'CREATE']
     }],
     status: {
         type: String,

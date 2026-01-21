@@ -5,8 +5,30 @@ const Chapter = require('../models/Chapter');
 // --- 2.1 Basic Calculation Test Setup ---
 const getBasicTestConfig = async (req, res) => {
     try {
-        const config = await Config.findOne({ key: 'basic-test' });
-        res.json(config ? config.value : {});
+        const { classId } = req.query;
+        
+        // If classId is provided, look for class-specific config
+        // Otherwise, return global config (classId empty or undefined)
+        const key = classId ? `basic-test-${classId}` : 'basic-test';
+        const config = await Config.findOne({ key });
+        
+        if (config) {
+            res.json(config.value);
+        } else {
+            // Return default structure if no config exists
+            res.json({
+                totalQuestions: 20,
+                difficultyDistribution: {
+                    easy: 30,
+                    medium: 50,
+                    hard: 20
+                },
+                passingPercentage: 60,
+                repeatThreshold: 3,
+                classId: classId || '',
+                instructionType: ''
+            });
+        }
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -14,11 +36,41 @@ const getBasicTestConfig = async (req, res) => {
 
 const updateBasicTestConfig = async (req, res) => {
     try {
-        const { totalQuestions, difficultyDistribution, passingPercentage, repeatThreshold } = req.body;
-        const value = { totalQuestions, difficultyDistribution, passingPercentage, repeatThreshold };
+        const { 
+            totalQuestions, 
+            difficultyDistribution, 
+            passingPercentage, 
+            repeatThreshold,
+            classId,
+            instructionType
+        } = req.body;
+
+        // Validate difficulty distribution sums to totalQuestions
+        if (difficultyDistribution) {
+            const sum = difficultyDistribution.easy + 
+                       difficultyDistribution.medium + 
+                       difficultyDistribution.hard;
+            if (sum !== totalQuestions) {
+                return res.status(400).json({ 
+                    message: `difficultyDistribution (${sum}) must sum to totalQuestions (${totalQuestions})` 
+                });
+            }
+        }
+
+        const value = { 
+            totalQuestions, 
+            difficultyDistribution, 
+            passingPercentage, 
+            repeatThreshold,
+            classId: classId || '', // Empty string for global config
+            instructionType: instructionType || ''
+        };
+
+        // Use classId to create class-specific config key, or 'basic-test' for global
+        const key = classId ? `basic-test-${classId}` : 'basic-test';
 
         const config = await Config.findOneAndUpdate(
-            { key: 'basic-test' },
+            { key },
             { value },
             { new: true, upsert: true } // Create if not exists
         );
