@@ -68,7 +68,8 @@ const {
 const {
     mapLearningOutcomesToCurriculum,
     getLearningOutcomeCurriculumMapping,
-    recalculateCurriculumMapping
+    recalculateCurriculumMapping,
+    recalculateLearningOutcomeMapping
 } = require('../controllers/adminCurriculumController');
 
 // All routes protected + admin only
@@ -145,5 +146,8 @@ router.post('/instructions', saveInstructions);
 router.post('/curriculum/map-learning-outcomes', mapLearningOutcomesToCurriculum);
 router.get('/curriculum/learning-outcomes/:learningOutcomeId/mapping', getLearningOutcomeCurriculumMapping);
 router.post('/curriculum/learning-outcomes/:learningOutcomeId/recalculate', recalculateCurriculumMapping);
+
+// 2.10.1 Learning Outcome to Learning Outcome Mapping
+router.post('/curriculum/learning-outcomes/:learningOutcomeId/recalculate-mapping', recalculateLearningOutcomeMapping);
 
 module.exports = router;

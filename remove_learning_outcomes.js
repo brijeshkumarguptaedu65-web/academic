@@ -6,6 +6,7 @@ dotenv.config();
 
 const LearningOutcome = require('./models/LearningOutcome');
 const CurriculumMapping = require('./models/CurriculumMapping');
+const LearningOutcomeMapping = require('./models/LearningOutcomeMapping');
 const LearningOutcomeRemedial = require('./models/LearningOutcomeRemedial');
 
 const removeAllLearningOutcomes = async () => {
@@ -41,7 +42,32 @@ const removeAllLearningOutcomes = async () => {
             console.log(`✓ Deleted ${curriculumResult.deletedCount} curriculum mappings`);
         }
 
-        // 4. Delete learning outcome remedials
+        // 4. Delete learning outcome to learning outcome mappings
+        const learningOutcomeMappingCount = await LearningOutcomeMapping.countDocuments({
+            learningOutcomeId: { $in: ids }
+        });
+        console.log(`Found ${learningOutcomeMappingCount} learning outcome mappings`);
+        
+        if (learningOutcomeMappingCount > 0) {
+            const mappingResult = await LearningOutcomeMapping.deleteMany({
+                learningOutcomeId: { $in: ids }
+            });
+            console.log(`✓ Deleted ${mappingResult.deletedCount} learning outcome mappings`);
+        }
+
+        // Also delete mappings where these outcomes are referenced
+        const referencedMappingCount = await LearningOutcomeMapping.countDocuments({
+            'mappedLearningOutcomes.mappedLearningOutcomeId': { $in: ids }
+        });
+        if (referencedMappingCount > 0) {
+            await LearningOutcomeMapping.updateMany(
+                {},
+                { $pull: { mappedLearningOutcomes: { mappedLearningOutcomeId: { $in: ids } } } }
+            );
+            console.log(`✓ Removed references from ${referencedMappingCount} learning outcome mappings`);
+        }
+
+        // 5. Delete learning outcome remedials
         const remedialCount = await LearningOutcomeRemedial.countDocuments({
             learningOutcomeId: { $in: ids }
         });
@@ -54,15 +80,16 @@ const removeAllLearningOutcomes = async () => {
             console.log(`✓ Deleted ${remedialResult.deletedCount} learning outcome remedials`);
         }
 
-        // 5. Delete all learning outcomes
+        // 6. Delete all learning outcomes
         const learningOutcomeResult = await LearningOutcome.deleteMany({});
         console.log(`✓ Deleted ${learningOutcomeResult.deletedCount} learning outcomes`);
 
         console.log('\n=== Summary ===');
         console.log(`Learning Outcomes Deleted: ${learningOutcomeResult.deletedCount}`);
         console.log(`Curriculum Mappings Deleted: ${curriculumMappingCount}`);
+        console.log(`Learning Outcome Mappings Deleted: ${learningOutcomeMappingCount}`);
         console.log(`Remedials Deleted: ${remedialCount}`);
-        console.log(`Total Records Deleted: ${learningOutcomeResult.deletedCount + curriculumMappingCount + remedialCount}`);
+        console.log(`Total Records Deleted: ${learningOutcomeResult.deletedCount + curriculumMappingCount + learningOutcomeMappingCount + remedialCount}`);
 
         console.log('\n✅ All learning outcome data removed successfully!');
         process.exit(0);

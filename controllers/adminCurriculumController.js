@@ -1,6 +1,7 @@
 const LearningOutcome = require('../models/LearningOutcome');
 const Chapter = require('../models/Chapter');
 const CurriculumMapping = require('../models/CurriculumMapping');
+const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
 const { Class, Subject } = require('../models/Metadata');
 const axios = require('axios');
 
@@ -371,9 +372,235 @@ const recalculateCurriculumMapping = async (req, res) => {
     }
 };
 
+// Helper function to calculate and save learning outcome to learning outcome mapping
+const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
+    try {
+        const learningOutcome = await LearningOutcome.findById(learningOutcomeId)
+            .populate('classId', 'name level')
+            .populate('subjectId', 'name');
+
+        if (!learningOutcome) {
+            throw new Error('Learning outcome not found');
+        }
+
+        // Get all other learning outcomes of the same type
+        // Include same class, previous classes (prerequisites), and next classes (progressions)
+        const query = {
+            type: learningOutcome.type,
+            _id: { $ne: learningOutcomeId } // Exclude self
+        };
+
+        // For SUBJECT type, also match by subject
+        if (learningOutcome.type === 'SUBJECT' && learningOutcome.subjectId) {
+            query.subjectId = learningOutcome.subjectId._id;
+        }
+
+        const allLearningOutcomes = await LearningOutcome.find(query)
+            .populate('classId', 'name level')
+            .populate('subjectId', 'name')
+            .sort({ 'classId.level': 1, createdAt: -1 });
+
+        if (allLearningOutcomes.length === 0) {
+            // No other learning outcomes available, save empty mapping
+            await LearningOutcomeMapping.findOneAndUpdate(
+                { learningOutcomeId },
+                {
+                    learningOutcomeId,
+                    mappedLearningOutcomes: [],
+                    lastCalculatedAt: new Date()
+                },
+                { upsert: true, new: true }
+            );
+            return { mappedLearningOutcomes: [] };
+        }
+
+        // Prepare data for AI mapping
+        const currentLearningOutcome = {
+            id: learningOutcome._id.toString(),
+            tags: learningOutcome.text,
+            classLevel: learningOutcome.classId.level,
+            topicName: learningOutcome.topicName || '',
+            type: learningOutcome.type
+        };
+
+        const otherLearningOutcomes = allLearningOutcomes.map(lo => ({
+            id: lo._id.toString(),
+            tags: lo.text,
+            classLevel: lo.classId.level,
+            topicName: lo.topicName || '',
+            type: lo.type
+        }));
+
+        const aiPrompt = `You are an educational curriculum progression mapper. Map this learning outcome to related learning outcomes across different classes.
+
+Current Learning Outcome:
+- ID: ${currentLearningOutcome.id}
+- Tags: "${currentLearningOutcome.tags}"
+- Class: ${currentLearningOutcome.classLevel}
+- Topic: "${currentLearningOutcome.topicName}"
+- Type: ${currentLearningOutcome.type}
+
+Available Learning Outcomes (from other classes):
+${otherLearningOutcomes.map(lo => `- ID: ${lo.id}, Tags: "${lo.tags}", Class: ${lo.classLevel}, Topic: "${lo.topicName}"`).join('\n')}
+
+Analyze the comma-separated tags and find related learning outcomes. Consider:
+1. PREREQUISITE: Learning outcomes from LOWER classes that are prerequisites (e.g., Class 2 "adding single-digit numbers" is prerequisite for Class 3 "adding two-digit numbers")
+2. PROGRESSION: Learning outcomes from HIGHER classes that are progressions (e.g., Class 2 "adding single-digit numbers" progresses to Class 3 "adding two-digit numbers")
+3. RELATED: Learning outcomes from SAME or DIFFERENT classes that are related topics (e.g., Class 2 "table 1 to 5" is related to Class 4 "table 2 to 10")
+4. ADVANCED: Learning outcomes from HIGHER classes that are advanced versions
+
+Return a JSON object:
+{
+  "learningOutcomeId": "${currentLearningOutcome.id}",
+  "mappedLearningOutcomes": [
+    {
+      "mappedLearningOutcomeId": "learning outcome ID",
+      "mappingType": "PREREQUISITE|PROGRESSION|RELATED|ADVANCED",
+      "relevanceScore": 0.0-1.0,
+      "reason": "brief explanation"
+    }
+  ]
+}
+
+Only include mappings with relevanceScore >= 0.5. Return ONLY valid JSON, no additional text.`;
+
+        const aiResponse = await axios.post("https://api.deepseek.com/chat/completions", {
+            model: "deepseek-chat",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an expert educational curriculum progression mapper. Always respond with valid JSON only."
+                },
+                {
+                    role: "user",
+                    content: aiPrompt
+                }
+            ],
+            temperature: 0.3,
+            max_tokens: 2000
+        }, {
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+            }
+        });
+
+        const aiData = aiResponse.data;
+        const aiContent = aiData.choices?.[0]?.message?.content;
+
+        if (!aiContent) {
+            throw new Error('Invalid response from AI service');
+        }
+
+        // Parse AI response
+        let mapping;
+        try {
+            const cleanedContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            mapping = JSON.parse(cleanedContent);
+        } catch (parseError) {
+            console.error('AI Response Parse Error:', aiContent);
+            throw new Error('Failed to parse AI response');
+        }
+
+        // Save to database
+        const learningOutcomeMapping = await LearningOutcomeMapping.findOneAndUpdate(
+            { learningOutcomeId },
+            {
+                learningOutcomeId,
+                mappedLearningOutcomes: mapping.mappedLearningOutcomes,
+                lastCalculatedAt: new Date()
+            },
+            { upsert: true, new: true }
+        );
+
+        return learningOutcomeMapping;
+    } catch (err) {
+        console.error('Error calculating learning outcome mapping:', err);
+        throw err;
+    }
+};
+
+// Recalculate learning outcome to learning outcome mapping
+const recalculateLearningOutcomeMapping = async (req, res) => {
+    try {
+        const { learningOutcomeId } = req.params;
+
+        const learningOutcome = await LearningOutcome.findById(learningOutcomeId);
+        if (!learningOutcome) {
+            return res.status(404).json({ 
+                message: 'Learning outcome not found' 
+            });
+        }
+
+        // Calculate and save mapping
+        const mapping = await calculateAndSaveLearningOutcomeMapping(learningOutcomeId);
+
+        // Get full details for response
+        const populatedMapping = await LearningOutcomeMapping.findById(mapping._id);
+        const learningOutcomeDetails = await LearningOutcome.findById(learningOutcomeId)
+            .populate('classId', 'name level')
+            .populate('subjectId', 'name');
+
+        const mappedOutcomeIds = populatedMapping.mappedLearningOutcomes.map(m => m.mappedLearningOutcomeId);
+        const mappedOutcomes = await LearningOutcome.find({
+            _id: { $in: mappedOutcomeIds }
+        })
+        .populate('classId', 'name level')
+        .populate('subjectId', 'name');
+
+        const mappedLearningOutcomes = populatedMapping.mappedLearningOutcomes.map(mo => {
+            const mappedOutcome = mappedOutcomes.find(
+                o => o._id.toString() === mo.mappedLearningOutcomeId.toString()
+            );
+            return {
+                learningOutcomeId: mo.mappedLearningOutcomeId.toString(),
+                learningOutcome: mappedOutcome ? {
+                    id: mappedOutcome._id.toString(),
+                    text: mappedOutcome.text,
+                    tags: mappedOutcome.text.split(',').map(t => t.trim()),
+                    classLevel: mappedOutcome.classId.level,
+                    className: mappedOutcome.classId.name,
+                    topicName: mappedOutcome.topicName,
+                    type: mappedOutcome.type
+                } : null,
+                mappingType: mo.mappingType,
+                relevanceScore: mo.relevanceScore,
+                reason: mo.reason
+            };
+        });
+
+        res.json({
+            success: true,
+            message: 'Learning outcome mapping recalculated and saved',
+            learningOutcome: {
+                id: learningOutcomeDetails._id,
+                text: learningOutcomeDetails.text,
+                tags: learningOutcomeDetails.text.split(',').map(t => t.trim()),
+                classLevel: learningOutcomeDetails.classId.level,
+                className: learningOutcomeDetails.classId.name,
+                topicName: learningOutcomeDetails.topicName,
+                type: learningOutcomeDetails.type
+            },
+            mappedLearningOutcomes,
+            lastCalculatedAt: populatedMapping.lastCalculatedAt
+        });
+
+    } catch (err) {
+        console.error('Recalculate Learning Outcome Mapping Error:', err);
+        const errorMessage = err.response?.data?.error?.message || err.message || 'Unknown error';
+        res.status(err.response?.status || 500).json({ 
+            message: 'Failed to recalculate learning outcome mapping',
+            error: errorMessage,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
 module.exports = {
     mapLearningOutcomesToCurriculum,
     getLearningOutcomeCurriculumMapping,
     recalculateCurriculumMapping,
-    calculateAndSaveCurriculumMapping // Export for use in other controllers
+    calculateAndSaveCurriculumMapping, // Export for use in other controllers
+    calculateAndSaveLearningOutcomeMapping, // Export for learning outcome to learning outcome mapping
+    recalculateLearningOutcomeMapping
 };
