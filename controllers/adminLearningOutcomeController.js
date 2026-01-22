@@ -1,6 +1,39 @@
 const LearningOutcome = require('../models/LearningOutcome');
 const { calculateAndSaveCurriculumMapping, calculateAndSaveLearningOutcomeMapping } = require('./adminCurriculumController');
 
+// Helper function to recalculate mappings for learning outcomes that might be affected by a new/updated learning outcome
+const recalculateAffectedMappings = async (newOrUpdatedOutcome) => {
+    try {
+        // Find all learning outcomes of the same type and subject that might map to this one
+        const query = {
+            type: newOrUpdatedOutcome.type,
+            _id: { $ne: newOrUpdatedOutcome._id }
+        };
+
+        if (newOrUpdatedOutcome.type === 'SUBJECT' && newOrUpdatedOutcome.subjectId) {
+            query.subjectId = newOrUpdatedOutcome.subjectId._id;
+        }
+
+        const affectedOutcomes = await LearningOutcome.find(query)
+            .select('_id')
+            .limit(50); // Limit to avoid too many recalculations
+
+        console.log(`Recalculating mappings for ${affectedOutcomes.length} potentially affected learning outcomes...`);
+
+        // Recalculate mappings for affected outcomes (in background, don't wait)
+        affectedOutcomes.forEach(affected => {
+            calculateAndSaveLearningOutcomeMapping(affected._id).catch(err => {
+                console.error(`Error recalculating mapping for affected LO ${affected._id}:`, err);
+            });
+        });
+
+        return { recalculated: affectedOutcomes.length };
+    } catch (err) {
+        console.error('Error in recalculateAffectedMappings:', err);
+        return { recalculated: 0 };
+    }
+};
+
 // --- Learning Outcome Management ---
 const getLearningOutcomes = async (req, res) => {
     try {
@@ -158,6 +191,10 @@ const createLearningOutcome = async (req, res) => {
             .then(result => {
                 console.log(`✓ Learning outcome mapping calculated for ${outcome._id}:`, 
                     result.mappedLearningOutcomes?.length || 0, 'mappings');
+                
+                // Also recalculate mappings for other learning outcomes that might now map to this new one
+                // This ensures bidirectional mappings are updated
+                return recalculateAffectedMappings(outcome);
             })
             .catch(err => {
                 console.error('Error calculating learning outcome mapping for new learning outcome:', err);
@@ -192,16 +229,19 @@ const updateLearningOutcome = async (req, res) => {
             return res.status(404).json({ message: 'Learning outcome not found' });
         }
 
-        // If text was updated, recalculate mappings in background
-        if (text !== undefined) {
+        // If text or topicName was updated, recalculate mappings in background
+        if (text !== undefined || topicName !== undefined) {
             calculateAndSaveCurriculumMapping(outcome._id).catch(err => {
                 console.error('Error recalculating curriculum mapping after update:', err);
-                // Don't fail the request if mapping calculation fails
             });
-            calculateAndSaveLearningOutcomeMapping(outcome._id).catch(err => {
-                console.error('Error recalculating learning outcome mapping after update:', err);
-                // Don't fail the request if mapping calculation fails
-            });
+            calculateAndSaveLearningOutcomeMapping(outcome._id)
+                .then(() => {
+                    // Recalculate affected mappings
+                    return recalculateAffectedMappings(outcome);
+                })
+                .catch(err => {
+                    console.error('Error recalculating learning outcome mapping after update:', err);
+                });
         }
 
         const obj = outcome.toObject();
@@ -214,22 +254,42 @@ const updateLearningOutcome = async (req, res) => {
 
 const deleteLearningOutcome = async (req, res) => {
     try {
-        const outcome = await LearningOutcome.findByIdAndDelete(req.params.id);
+        const outcome = await LearningOutcome.findById(req.params.id);
         if (!outcome) {
             return res.status(404).json({ message: 'Learning outcome not found' });
         }
 
-        // Also delete associated mappings
-        const CurriculumMapping = require('../models/CurriculumMapping');
+        // Get IDs of learning outcomes that were mapped to this one (before deletion)
         const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
+        const affectedMappings = await LearningOutcomeMapping.find({
+            'mappedLearningOutcomes.mappedLearningOutcomeId': req.params.id
+        });
+
+        // Delete the learning outcome
+        await LearningOutcome.findByIdAndDelete(req.params.id);
+
+        // Delete associated mappings
+        const CurriculumMapping = require('../models/CurriculumMapping');
         await CurriculumMapping.deleteOne({ learningOutcomeId: req.params.id });
         await LearningOutcomeMapping.deleteOne({ learningOutcomeId: req.params.id });
         
-        // Also delete mappings where this outcome is referenced
+        // Remove references to this outcome from other mappings
         await LearningOutcomeMapping.updateMany(
             {},
             { $pull: { mappedLearningOutcomes: { mappedLearningOutcomeId: req.params.id } } }
         );
+
+        // Recalculate mappings for affected learning outcomes (in background)
+        if (affectedMappings.length > 0) {
+            const affectedIds = affectedMappings.map(m => m.learningOutcomeId);
+            const { calculateAndSaveLearningOutcomeMapping } = require('./adminCurriculumController');
+            
+            affectedIds.forEach(id => {
+                calculateAndSaveLearningOutcomeMapping(id).catch(err => {
+                    console.error(`Error recalculating mapping for affected LO ${id}:`, err);
+                });
+            });
+        }
 
         res.json({ message: 'Learning outcome removed' });
     } catch (err) {
