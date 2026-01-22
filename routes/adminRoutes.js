@@ -65,6 +65,12 @@ const {
     deleteLearningOutcomeRemedialItem
 } = require('../controllers/adminLearningOutcomeContentController');
 
+const {
+    mapLearningOutcomesToCurriculum,
+    getLearningOutcomeCurriculumMapping,
+    recalculateCurriculumMapping
+} = require('../controllers/adminCurriculumController');
+
 // All routes protected + admin only
 router.use(protect, admin);
 
@@ -134,5 +140,10 @@ router.delete('/learning-outcome-remedials/:remedialId', deleteLearningOutcomeRe
 // 2.9 Instructions
 router.get('/instructions', getInstructions);
 router.post('/instructions', saveInstructions);
+
+// 2.10 Curriculum Mapping (AI-powered, stored in DB)
+router.post('/curriculum/map-learning-outcomes', mapLearningOutcomesToCurriculum);
+router.get('/curriculum/learning-outcomes/:learningOutcomeId/mapping', getLearningOutcomeCurriculumMapping);
+router.post('/curriculum/learning-outcomes/:learningOutcomeId/recalculate', recalculateCurriculumMapping);
 
 module.exports = router;

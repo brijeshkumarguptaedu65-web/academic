@@ -1,4 +1,5 @@
 const LearningOutcome = require('../models/LearningOutcome');
+const { calculateAndSaveCurriculumMapping } = require('./adminCurriculumController');
 
 // --- Learning Outcome Management ---
 const getLearningOutcomes = async (req, res) => {
@@ -100,6 +101,12 @@ const createLearningOutcome = async (req, res) => {
             .populate('classId', 'name level')
             .populate('subjectId', 'name');
 
+        // Calculate and save curriculum mapping in background (don't wait for it)
+        calculateAndSaveCurriculumMapping(outcome._id).catch(err => {
+            console.error('Error calculating curriculum mapping for new learning outcome:', err);
+            // Don't fail the request if mapping calculation fails
+        });
+
         const obj = populated.toObject();
         obj.id = obj._id;
         res.status(201).json(obj);
@@ -128,6 +135,14 @@ const updateLearningOutcome = async (req, res) => {
             return res.status(404).json({ message: 'Learning outcome not found' });
         }
 
+        // If text was updated, recalculate curriculum mapping in background
+        if (text !== undefined) {
+            calculateAndSaveCurriculumMapping(outcome._id).catch(err => {
+                console.error('Error recalculating curriculum mapping after update:', err);
+                // Don't fail the request if mapping calculation fails
+            });
+        }
+
         const obj = outcome.toObject();
         obj.id = obj._id;
         res.json(obj);
@@ -142,6 +157,11 @@ const deleteLearningOutcome = async (req, res) => {
         if (!outcome) {
             return res.status(404).json({ message: 'Learning outcome not found' });
         }
+
+        // Also delete associated curriculum mapping
+        const CurriculumMapping = require('../models/CurriculumMapping');
+        await CurriculumMapping.deleteOne({ learningOutcomeId: req.params.id });
+
         res.json({ message: 'Learning outcome removed' });
     } catch (err) {
         res.status(500).json({ message: err.message });
