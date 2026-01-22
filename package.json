@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "remove:learning-outcomes": "node remove_learning_outcomes.js"
   },
   "keywords": [],
   "author": "",
