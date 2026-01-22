@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "remove:learning-outcomes": "node remove_learning_outcomes.js"
+    "remove:learning-outcomes": "node remove_learning_outcomes.js",
+    "calculate:mappings": "node calculate_all_learning_outcome_mappings.js"
   },
   "keywords": [],
   "author": "",

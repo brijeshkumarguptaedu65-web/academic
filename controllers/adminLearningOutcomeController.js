@@ -7,9 +7,9 @@ const getLearningOutcomes = async (req, res) => {
         const { classId, subjectId, type } = req.query;
         const LearningOutcomeRemedial = require('../models/LearningOutcomeRemedial');
 
-        if (!classId || !type) {
+        if (!type) {
             return res.status(400).json({ 
-                message: 'classId and type are required' 
+                message: 'type is required' 
             });
         }
 
@@ -21,17 +21,16 @@ const getLearningOutcomes = async (req, res) => {
         }
 
         const query = { 
-            classId, 
             type 
         };
 
-        // For SUBJECT type, subjectId is required
-        if (type === 'SUBJECT') {
-            if (!subjectId) {
-                return res.status(400).json({ 
-                    message: 'subjectId is required for SUBJECT type' 
-                });
-            }
+        // classId is optional - filter by class if provided
+        if (classId) {
+            query.classId = classId;
+        }
+
+        // For SUBJECT type, subjectId is optional - filter by subject if provided
+        if (type === 'SUBJECT' && subjectId) {
             query.subjectId = subjectId;
         }
         // For BASIC_CALCULATION, subjectId is ignored even if provided
@@ -153,10 +152,15 @@ const createLearningOutcome = async (req, res) => {
         });
 
         // Calculate and save learning outcome to learning outcome mapping in background
-        calculateAndSaveLearningOutcomeMapping(outcome._id).catch(err => {
-            console.error('Error calculating learning outcome mapping for new learning outcome:', err);
-            // Don't fail the request if mapping calculation fails
-        });
+        calculateAndSaveLearningOutcomeMapping(outcome._id)
+            .then(result => {
+                console.log(`✓ Learning outcome mapping calculated for ${outcome._id}:`, 
+                    result.mappedLearningOutcomes?.length || 0, 'mappings');
+            })
+            .catch(err => {
+                console.error('Error calculating learning outcome mapping for new learning outcome:', err);
+                // Don't fail the request if mapping calculation fails
+            });
 
         const obj = populated.toObject();
         obj.id = obj._id;

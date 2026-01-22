@@ -400,8 +400,11 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
             .populate('subjectId', 'name')
             .sort({ 'classId.level': 1, createdAt: -1 });
 
+        console.log(`Found ${allLearningOutcomes.length} other learning outcomes to map against for LO ${learningOutcomeId}`);
+
         if (allLearningOutcomes.length === 0) {
             // No other learning outcomes available, save empty mapping
+            console.log(`No other learning outcomes found for type ${learningOutcome.type}, subject ${learningOutcome.subjectId?._id || 'N/A'}`);
             await LearningOutcomeMapping.findOneAndUpdate(
                 { learningOutcomeId },
                 {
@@ -507,12 +510,13 @@ Only include mappings with relevanceScore >= 0.5. Return ONLY valid JSON, no add
             { learningOutcomeId },
             {
                 learningOutcomeId,
-                mappedLearningOutcomes: mapping.mappedLearningOutcomes,
+                mappedLearningOutcomes: mapping.mappedLearningOutcomes || [],
                 lastCalculatedAt: new Date()
             },
             { upsert: true, new: true }
         );
 
+        console.log(`✓ Saved ${mapping.mappedLearningOutcomes?.length || 0} mappings for learning outcome ${learningOutcomeId}`);
         return learningOutcomeMapping;
     } catch (err) {
         console.error('Error calculating learning outcome mapping:', err);
