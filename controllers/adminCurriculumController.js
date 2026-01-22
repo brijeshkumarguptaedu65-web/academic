@@ -372,7 +372,90 @@ const recalculateCurriculumMapping = async (req, res) => {
     }
 };
 
-// Helper function to calculate and save learning outcome to learning outcome mapping
+// Helper function to extract tags from comma-separated text
+const extractTags = (text) => {
+    if (!text) return [];
+    return text
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean);
+};
+
+// Helper function to normalize tags for better AI matching
+const normalizeTag = (tag) => {
+    return tag
+        .toLowerCase()
+        .replace(/\(.*?\)/g, '') // remove (1–20), (up to 99), etc.
+        .replace(/[-–]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+// Helper function to get tag relevancy using DeepSeek API
+const getTagRelevancy = async (tagA, tagB, classLevelA, classLevelB) => {
+    try {
+        const aiPrompt = `You are an education domain expert. Compare two learning outcome tags from different class levels.
+
+Tag A (Class ${classLevelA}): "${tagA}"
+Tag B (Class ${classLevelB}): "${tagB}"
+
+Analyze the semantic relationship between these tags. Consider:
+- Are they the same concept at different levels?
+- Is one a prerequisite for the other?
+- Is one a progression/advancement of the other?
+- What is the relevancy score (0.0 to 1.0)?
+
+Return a JSON object:
+{
+  "relevancyScore": 0.0-1.0,
+  "relation": "same|progression|prerequisite|related|unrelated",
+  "reason": "brief explanation"
+}
+
+Return ONLY valid JSON, no additional text.`;
+
+        const aiResponse = await axios.post("https://api.deepseek.com/chat/completions", {
+            model: "deepseek-chat",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an education domain expert. Always respond with valid JSON only."
+                },
+                {
+                    role: "user",
+                    content: aiPrompt
+                }
+            ],
+            temperature: 0.3,
+            max_tokens: 500
+        }, {
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+            }
+        });
+
+        const aiData = aiResponse.data;
+        const aiContent = aiData.choices?.[0]?.message?.content;
+
+        if (!aiContent) {
+            return { relevancyScore: 0, relation: 'unrelated', reason: 'No AI response' };
+        }
+
+        try {
+            const cleanedContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            return JSON.parse(cleanedContent);
+        } catch (parseError) {
+            console.error('AI Response Parse Error:', aiContent);
+            return { relevancyScore: 0, relation: 'unrelated', reason: 'Parse error' };
+        }
+    } catch (err) {
+        console.error('Error getting tag relevancy:', err.message);
+        return { relevancyScore: 0, relation: 'unrelated', reason: 'API error' };
+    }
+};
+
+// Helper function to calculate and save learning outcome to learning outcome mapping (TAG-WISE)
 const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
     try {
         const learningOutcome = await LearningOutcome.findById(learningOutcomeId)
@@ -383,8 +466,23 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
             throw new Error('Learning outcome not found');
         }
 
+        // Extract tags from current learning outcome
+        const currentTags = extractTags(learningOutcome.text);
+        if (currentTags.length === 0) {
+            console.log(`No tags found in learning outcome ${learningOutcomeId}`);
+            await LearningOutcomeMapping.findOneAndUpdate(
+                { learningOutcomeId },
+                {
+                    learningOutcomeId,
+                    mappedLearningOutcomes: [],
+                    lastCalculatedAt: new Date()
+                },
+                { upsert: true, new: true }
+            );
+            return { mappedLearningOutcomes: [] };
+        }
+
         // Get all other learning outcomes of the same type
-        // Include same class, previous classes (prerequisites), and next classes (progressions)
         const query = {
             type: learningOutcome.type,
             _id: { $ne: learningOutcomeId } // Exclude self
@@ -403,7 +501,6 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
         console.log(`Found ${allLearningOutcomes.length} other learning outcomes to map against for LO ${learningOutcomeId}`);
 
         if (allLearningOutcomes.length === 0) {
-            // No other learning outcomes available, save empty mapping
             console.log(`No other learning outcomes found for type ${learningOutcome.type}, subject ${learningOutcome.subjectId?._id || 'N/A'}`);
             await LearningOutcomeMapping.findOneAndUpdate(
                 { learningOutcomeId },
@@ -417,106 +514,82 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
             return { mappedLearningOutcomes: [] };
         }
 
-        // Prepare data for AI mapping
-        const currentLearningOutcome = {
-            id: learningOutcome._id.toString(),
-            tags: learningOutcome.text,
-            classLevel: learningOutcome.classId.level,
-            topicName: learningOutcome.topicName || '',
-            type: learningOutcome.type
-        };
+        // Tag-wise mapping: Compare each tag from current LO with tags from other LOs
+        const tagMappings = [];
+        const currentClassLevel = learningOutcome.classId.level;
 
-        const otherLearningOutcomes = allLearningOutcomes.map(lo => ({
-            id: lo._id.toString(),
-            tags: lo.text,
-            classLevel: lo.classId.level,
-            topicName: lo.topicName || '',
-            type: lo.type
-        }));
+        for (const otherLO of allLearningOutcomes) {
+            const otherTags = extractTags(otherLO.text);
+            const otherClassLevel = otherLO.classId.level;
 
-        const aiPrompt = `You are an educational curriculum progression mapper. Map this learning outcome to related learning outcomes across different classes.
+            // Compare each current tag with each other tag
+            for (const currentTag of currentTags) {
+                for (const otherTag of otherTags) {
+                    // Get relevancy between tags
+                    const relevancy = await getTagRelevancy(
+                        currentTag,
+                        otherTag,
+                        currentClassLevel,
+                        otherClassLevel
+                    );
 
-Current Learning Outcome:
-- ID: ${currentLearningOutcome.id}
-- Tags: "${currentLearningOutcome.tags}"
-- Class: ${currentLearningOutcome.classLevel}
-- Topic: "${currentLearningOutcome.topicName}"
-- Type: ${currentLearningOutcome.type}
+                    // Only include mappings with relevancy >= 0.4
+                    if (relevancy.relevancyScore >= 0.4) {
+                        // Determine mapping type based on class level and relation
+                        let mappingType = 'RELATED';
+                        if (otherClassLevel < currentClassLevel) {
+                            mappingType = relevancy.relation === 'prerequisite' ? 'PREREQUISITE' : 'RELATED';
+                        } else if (otherClassLevel > currentClassLevel) {
+                            mappingType = relevancy.relation === 'progression' ? 'PROGRESSION' : 
+                                         relevancy.relation === 'prerequisite' ? 'ADVANCED' : 'RELATED';
+                        }
 
-Available Learning Outcomes (from other classes):
-${otherLearningOutcomes.map(lo => `- ID: ${lo.id}, Tags: "${lo.tags}", Class: ${lo.classLevel}, Topic: "${lo.topicName}"`).join('\n')}
+                        // Check if we already have a mapping for this learning outcome
+                        const existingMapping = tagMappings.find(
+                            tm => tm.mappedLearningOutcomeId.toString() === otherLO._id.toString()
+                        );
 
-Analyze the comma-separated tags and find related learning outcomes. Consider:
-1. PREREQUISITE: Learning outcomes from LOWER classes that are prerequisites (e.g., Class 2 "adding single-digit numbers" is prerequisite for Class 3 "adding two-digit numbers")
-2. PROGRESSION: Learning outcomes from HIGHER classes that are progressions (e.g., Class 2 "adding single-digit numbers" progresses to Class 3 "adding two-digit numbers")
-3. RELATED: Learning outcomes from SAME or DIFFERENT classes that are related topics (e.g., Class 2 "table 1 to 5" is related to Class 4 "table 2 to 10")
-4. ADVANCED: Learning outcomes from HIGHER classes that are advanced versions
+                        if (!existingMapping) {
+                            tagMappings.push({
+                                mappedLearningOutcomeId: otherLO._id,
+                                mappingType: mappingType,
+                                relevanceScore: relevancy.relevancyScore,
+                                reason: `${currentTag} → ${otherTag}: ${relevancy.reason}`,
+                                fromTag: currentTag,
+                                toTag: otherTag
+                            });
+                        } else {
+                            // Update if this tag pair has higher relevancy
+                            if (relevancy.relevancyScore > existingMapping.relevanceScore) {
+                                existingMapping.relevanceScore = relevancy.relevancyScore;
+                                existingMapping.reason = `${currentTag} → ${otherTag}: ${relevancy.reason}`;
+                                existingMapping.fromTag = currentTag;
+                                existingMapping.toTag = otherTag;
+                            }
+                        }
+                    }
 
-Return a JSON object:
-{
-  "learningOutcomeId": "${currentLearningOutcome.id}",
-  "mappedLearningOutcomes": [
-    {
-      "mappedLearningOutcomeId": "learning outcome ID",
-      "mappingType": "PREREQUISITE|PROGRESSION|RELATED|ADVANCED",
-      "relevanceScore": 0.0-1.0,
-      "reason": "brief explanation"
-    }
-  ]
-}
-
-Only include mappings with relevanceScore >= 0.5. Return ONLY valid JSON, no additional text.`;
-
-        const aiResponse = await axios.post("https://api.deepseek.com/chat/completions", {
-            model: "deepseek-chat",
-            messages: [
-                {
-                    role: "system",
-                    content: "You are an expert educational curriculum progression mapper. Always respond with valid JSON only."
-                },
-                {
-                    role: "user",
-                    content: aiPrompt
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 200));
                 }
-            ],
-            temperature: 0.3,
-            max_tokens: 2000
-        }, {
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
             }
-        });
-
-        const aiData = aiResponse.data;
-        const aiContent = aiData.choices?.[0]?.message?.content;
-
-        if (!aiContent) {
-            throw new Error('Invalid response from AI service');
         }
 
-        // Parse AI response
-        let mapping;
-        try {
-            const cleanedContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-            mapping = JSON.parse(cleanedContent);
-        } catch (parseError) {
-            console.error('AI Response Parse Error:', aiContent);
-            throw new Error('Failed to parse AI response');
-        }
+        // Sort by relevancy score (highest first)
+        tagMappings.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
         // Save to database
         const learningOutcomeMapping = await LearningOutcomeMapping.findOneAndUpdate(
             { learningOutcomeId },
             {
                 learningOutcomeId,
-                mappedLearningOutcomes: mapping.mappedLearningOutcomes || [],
+                mappedLearningOutcomes: tagMappings,
                 lastCalculatedAt: new Date()
             },
             { upsert: true, new: true }
         );
 
-        console.log(`✓ Saved ${mapping.mappedLearningOutcomes?.length || 0} mappings for learning outcome ${learningOutcomeId}`);
+        console.log(`✓ Saved ${tagMappings.length} tag-wise mappings for learning outcome ${learningOutcomeId}`);
         return learningOutcomeMapping;
     } catch (err) {
         console.error('Error calculating learning outcome mapping:', err);
@@ -569,7 +642,9 @@ const recalculateLearningOutcomeMapping = async (req, res) => {
                 } : null,
                 mappingType: mo.mappingType,
                 relevanceScore: mo.relevanceScore,
-                reason: mo.reason
+                reason: mo.reason,
+                fromTag: mo.fromTag || null,
+                toTag: mo.toTag || null
             };
         });
 

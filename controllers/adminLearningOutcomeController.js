@@ -91,7 +91,9 @@ const getLearningOutcomes = async (req, res) => {
                             } : null,
                             mappingType: mo.mappingType,
                             relevanceScore: mo.relevanceScore,
-                            reason: mo.reason
+                            reason: mo.reason,
+                            fromTag: mo.fromTag || null, // Tag from current learning outcome
+                            toTag: mo.toTag || null // Tag from mapped learning outcome
                         };
                     });
                 } else {

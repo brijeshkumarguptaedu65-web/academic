@@ -26,6 +26,14 @@ const learningOutcomeMappingSchema = new mongoose.Schema({
         reason: {
             type: String,
             required: true
+        },
+        fromTag: {
+            type: String,
+            required: false // Tag from current learning outcome
+        },
+        toTag: {
+            type: String,
+            required: false // Tag from mapped learning outcome
         }
     }],
     lastCalculatedAt: {
