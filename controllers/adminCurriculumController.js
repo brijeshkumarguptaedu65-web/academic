@@ -394,16 +394,25 @@ const normalizeTag = (tag) => {
 // Helper function to get tag relevancy using DeepSeek API
 const getTagRelevancy = async (tagA, tagB, classLevelA, classLevelB) => {
     try {
-        const aiPrompt = `You are an education domain expert. Compare two learning outcome tags from different class levels.
+        const aiPrompt = `You are an education domain expert. Compare two learning outcome tags from different class levels. Map based PURELY on text meaning, ignoring class/topic labels.
 
 Tag A (Class ${classLevelA}): "${tagA}"
 Tag B (Class ${classLevelB}): "${tagB}"
 
 Analyze the semantic relationship between these tags. Consider:
-- Are they the same concept at different levels?
-- Is one a prerequisite for the other?
-- Is one a progression/advancement of the other?
-- What is the relevancy score (0.0 to 1.0)?
+1. Are they the same concept at different levels? (e.g., "Table 1 to 5" → "Table 1 to 10" is a clear progression)
+2. Is one a prerequisite for the other?
+3. Is one a progression/advancement of the other?
+4. Do they involve similar skills but different complexity?
+5. Look for numeric progressions (1-5 → 1-10, single-digit → two-digit, etc.)
+6. Look for skill progressions (basic → advanced, simple → complex)
+
+IMPORTANT: 
+- "Table 1 to 5" should map to "Table 1 to 10" as PROGRESSION (higher score)
+- "adding single-digit" should map to "adding two-digit" as PROGRESSION
+- Similar concepts with increasing difficulty = PROGRESSION
+- Complementary skills = RELATED
+- Unrelated = NONE
 
 Return a JSON object:
 {
@@ -482,16 +491,15 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
             return { mappedLearningOutcomes: [] };
         }
 
-        // Get all other learning outcomes of the same type
+        // Get all other learning outcomes - map across ALL classes, types, and subjects
+        // This allows comprehensive progression chains like "Table 1 to 5" → "Table 1 to 10"
+        // regardless of topic or subject
         const query = {
-            type: learningOutcome.type,
-            _id: { $ne: learningOutcomeId } // Exclude self
+            _id: { $ne: learningOutcomeId } // Exclude self only
         };
 
-        // For SUBJECT type, also match by subject
-        if (learningOutcome.type === 'SUBJECT' && learningOutcome.subjectId) {
-            query.subjectId = learningOutcome.subjectId._id;
-        }
+        // Map across all types and subjects for comprehensive tag-wise mapping
+        // This ensures "Table 1 to 5" (Class 3, any topic) maps to "Table 1 to 10" (Class 4, any topic)
 
         const allLearningOutcomes = await LearningOutcome.find(query)
             .populate('classId', 'name level')
@@ -533,15 +541,38 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
                         otherClassLevel
                     );
 
-                    // Only include mappings with relevancy >= 0.4
-                    if (relevancy.relevancyScore >= 0.4) {
+                    // Include mappings with relevancy >= 0.3 (lowered threshold for better coverage)
+                    // Also include if relation is "same" or "progression" even with lower scores
+                    const shouldInclude = relevancy.relevancyScore >= 0.3 || 
+                                         relevancy.relation === 'same' || 
+                                         relevancy.relation === 'progression';
+                    
+                    if (shouldInclude) {
                         // Determine mapping type based on class level and relation
                         let mappingType = 'RELATED';
                         if (otherClassLevel < currentClassLevel) {
-                            mappingType = relevancy.relation === 'prerequisite' ? 'PREREQUISITE' : 'RELATED';
+                            // Lower class: could be prerequisite or related
+                            if (relevancy.relation === 'prerequisite' || relevancy.relation === 'same') {
+                                mappingType = 'PREREQUISITE';
+                            } else {
+                                mappingType = 'RELATED';
+                            }
                         } else if (otherClassLevel > currentClassLevel) {
-                            mappingType = relevancy.relation === 'progression' ? 'PROGRESSION' : 
-                                         relevancy.relation === 'prerequisite' ? 'ADVANCED' : 'RELATED';
+                            // Higher class: could be progression or advanced
+                            if (relevancy.relation === 'progression' || relevancy.relation === 'same') {
+                                mappingType = 'PROGRESSION';
+                            } else if (relevancy.relation === 'prerequisite') {
+                                mappingType = 'ADVANCED';
+                            } else {
+                                mappingType = 'RELATED';
+                            }
+                        } else {
+                            // Same class level
+                            if (relevancy.relation === 'same') {
+                                mappingType = 'RELATED';
+                            } else {
+                                mappingType = 'RELATED';
+                            }
                         }
 
                         // Check if we already have a mapping for this learning outcome
@@ -559,9 +590,14 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
                                 toTag: otherTag
                             });
                         } else {
-                            // Update if this tag pair has higher relevancy
-                            if (relevancy.relevancyScore > existingMapping.relevanceScore) {
+                            // Update if this tag pair has higher relevancy OR is a better match type
+                            const isBetterMatch = relevancy.relevancyScore > existingMapping.relevanceScore ||
+                                                 (relevancy.relation === 'progression' && existingMapping.mappingType !== 'PROGRESSION') ||
+                                                 (relevancy.relation === 'same' && existingMapping.mappingType !== 'PROGRESSION');
+                            
+                            if (isBetterMatch) {
                                 existingMapping.relevanceScore = relevancy.relevancyScore;
+                                existingMapping.mappingType = mappingType;
                                 existingMapping.reason = `${currentTag} → ${otherTag}: ${relevancy.reason}`;
                                 existingMapping.fromTag = currentTag;
                                 existingMapping.toTag = otherTag;
