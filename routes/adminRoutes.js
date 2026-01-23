@@ -74,7 +74,8 @@ const {
     getTopicTagMappings,
     getConceptGraph,
     getTopicList,
-    syncAllConceptGraphs
+    syncAllConceptGraphs,
+    syncAllTopicTagMappings
 } = require('../controllers/adminCurriculumController');
 
 // All routes protected + admin only
@@ -163,5 +164,8 @@ router.get('/curriculum/topics/:topicName/tag-mappings', getTopicTagMappings);
 router.get('/curriculum/topics', getTopicList); // Get topic list with concept graph status
 router.get('/curriculum/topics/:topicName/concept-graph', getConceptGraph); // Get concept graph for a topic
 router.post('/curriculum/sync-concept-graphs', syncAllConceptGraphs); // Sync all concept graphs
+
+// 2.10.4 Topic Tag Mappings Sync (AI-powered, stored in DB)
+router.post('/curriculum/sync-topic-tag-mappings', syncAllTopicTagMappings); // Sync all topic tag mappings
 
 module.exports = router;

@@ -778,13 +778,15 @@ const calculateAndSaveTopicTagMappings = async (topicName, type, subjectId = nul
 
         if (validOutcomes.length === 0) {
             // Save empty mapping
+            // For BASIC_CALCULATION, subjectId should always be null
+            const finalSubjectId = type === 'BASIC_CALCULATION' ? null : (subjectId || null);
             const TopicTagMapping = require('../models/TopicTagMapping');
             await TopicTagMapping.findOneAndUpdate(
-                { topicName, type, subjectId: subjectId || null },
+                { topicName, type, subjectId: finalSubjectId },
                 {
                     topicName,
                     type,
-                    subjectId: subjectId || null,
+                    subjectId: finalSubjectId,
                     tagMappings: [],
                     tagChains: [],
                     totalLearningOutcomes: 0,
@@ -937,13 +939,15 @@ const calculateAndSaveTopicTagMappings = async (topicName, type, subjectId = nul
         const chains = Object.values(tagChains).sort((a, b) => a.classLevel - b.classLevel);
 
         // Save to database
+        // For BASIC_CALCULATION, subjectId should always be null
+        const finalSubjectId = type === 'BASIC_CALCULATION' ? null : (subjectId || null);
         const TopicTagMapping = require('../models/TopicTagMapping');
         await TopicTagMapping.findOneAndUpdate(
-            { topicName, type, subjectId: subjectId || null },
+            { topicName, type, subjectId: finalSubjectId },
             {
                 topicName,
                 type,
-                subjectId: subjectId || null,
+                subjectId: finalSubjectId,
                 tagMappings: tagMappings,
                 tagChains: chains,
                 totalLearningOutcomes: validOutcomes.length,
@@ -980,13 +984,23 @@ const getTopicTagMappings = async (req, res) => {
             });
         }
 
+        // Validate type
+        if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+            return res.status(400).json({ message: 'type must be SUBJECT or BASIC_CALCULATION' });
+        }
+
         // Get mappings from database
         const TopicTagMapping = require('../models/TopicTagMapping');
-        const mapping = await TopicTagMapping.findOne({
+        const query = {
             topicName: topicName,
-            type: type,
-            subjectId: subjectId || null
-        });
+            type: type
+        };
+        // For SUBJECT type, subjectId is optional
+        if (type === 'SUBJECT') {
+            query.subjectId = subjectId || null;
+        }
+        // For BASIC_CALCULATION, subjectId is ignored
+        const mapping = await TopicTagMapping.findOne(query);
 
         if (!mapping) {
             return res.json({
@@ -1140,13 +1154,15 @@ const calculateAndSaveConceptGraph = async (topicName, type, subjectId = null, s
 
         if (validOutcomes.length === 0) {
             // Save empty graph
+            // For BASIC_CALCULATION, subjectId should always be null
+            const finalSubjectId = type === 'BASIC_CALCULATION' ? null : (subjectId || null);
             await ConceptGraph.findOneAndUpdate(
-                { topic: topicName, type, subjectId: subjectId || null },
+                { topic: topicName, type, subjectId: finalSubjectId },
                 {
                     subject: subjectName,
                     topic: topicName,
                     type,
-                    subjectId: subjectId || null,
+                    subjectId: finalSubjectId,
                     conceptGraphs: [],
                     totalNodes: 0,
                     totalEdges: 0,
@@ -1291,13 +1307,15 @@ CRITICAL REQUIREMENTS:
         });
 
         // Save to database
+        // For BASIC_CALCULATION, subjectId should always be null
+        const finalSubjectId = type === 'BASIC_CALCULATION' ? null : (subjectId || null);
         const savedGraph = await ConceptGraph.findOneAndUpdate(
-            { topic: topicName, type, subjectId: subjectId || null },
+            { topic: topicName, type, subjectId: finalSubjectId },
             {
                 subject: graphData.subject || subjectName,
                 topic: graphData.topic || topicName,
                 type,
-                subjectId: subjectId || null,
+                subjectId: finalSubjectId,
                 graphType: graphData.graphType || 'concept_wise_vertical_learning_graph',
                 conceptGraphs: graphData.conceptGraphs || [],
                 totalNodes,
@@ -1332,12 +1350,19 @@ const getConceptGraph = async (req, res) => {
             return res.status(400).json({ message: 'type is required' });
         }
 
+        // Validate type
+        if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+            return res.status(400).json({ message: 'type must be SUBJECT or BASIC_CALCULATION' });
+        }
+
         const query = { topic: topicName, type };
+        // For SUBJECT type, subjectId is optional
         if (type === 'SUBJECT' && subjectId) {
             query.subjectId = subjectId;
         } else if (type === 'SUBJECT') {
             query.subjectId = subjectId || null;
         }
+        // For BASIC_CALCULATION, subjectId is ignored
 
         const conceptGraph = await ConceptGraph.findOne(query).lean();
 
@@ -1371,6 +1396,71 @@ const getConceptGraph = async (req, res) => {
     }
 };
 
+// Helper function to get topics with learning outcomes (shared logic)
+// Returns: Array of { topicName, subjectId, count }
+// Supports both SUBJECT and BASIC_CALCULATION types
+const getTopicsWithLearningOutcomes = async (type, subjectId = null) => {
+    // Validate type
+    if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+        throw new Error('type must be SUBJECT or BASIC_CALCULATION');
+    }
+
+    const query = { type };
+    // For SUBJECT type, subjectId is optional
+    if (type === 'SUBJECT' && subjectId) {
+        query.subjectId = subjectId;
+    }
+    // For BASIC_CALCULATION, subjectId is ignored even if provided
+
+    // Get all learning outcomes to extract topics (including null/undefined topicName)
+    const outcomes = await LearningOutcome.find(query)
+        .populate({
+            path: 'classId',
+            select: 'name level',
+            match: { level: { $ne: null } }
+        })
+        .select('topicName subjectId')
+        .lean();
+
+    // Filter valid outcomes (with valid classId) and extract unique topics
+    // Use same logic as getLearningOutcomesByTopic: null/undefined topicName becomes 'No Topic'
+    const validOutcomes = outcomes.filter(o => {
+        try {
+            if (!o || !o.classId || !o.classId.level) {
+                return false;
+            }
+            return true;
+        } catch (err) {
+            return false;
+        }
+    });
+
+    // Extract unique topics (normalize null/undefined to 'No Topic')
+    // Count learning outcomes per topic to ensure we only show topics with outcomes
+    const topicMap = new Map();
+    validOutcomes.forEach(outcome => {
+        const topic = outcome.topicName || 'No Topic';
+        if (!topicMap.has(topic)) {
+            topicMap.set(topic, { count: 0, subjectId: outcome.subjectId });
+        }
+        const topicData = topicMap.get(topic);
+        topicData.count++;
+        // Keep the first valid subjectId we find
+        if (!topicData.subjectId && outcome.subjectId) {
+            topicData.subjectId = outcome.subjectId;
+        }
+    });
+
+    // Only include topics that have at least one learning outcome
+    return Array.from(topicMap.entries())
+        .filter(([topic, data]) => data.count > 0)
+        .map(([topic, data]) => ({ 
+            topicName: topic, 
+            subjectId: data.subjectId,
+            learningOutcomeCount: data.count
+        }));
+};
+
 // Get topic list (from learning outcomes - only topics with learning outcomes)
 const getTopicList = async (req, res) => {
     try {
@@ -1380,68 +1470,36 @@ const getTopicList = async (req, res) => {
             return res.status(400).json({ message: 'type is required' });
         }
 
-        const query = { type };
-        if (type === 'SUBJECT' && subjectId) {
-            query.subjectId = subjectId;
+        // Validate type
+        if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+            return res.status(400).json({ message: 'type must be SUBJECT or BASIC_CALCULATION' });
         }
 
-        // Get all learning outcomes to extract topics (including null/undefined topicName)
-        const outcomes = await LearningOutcome.find(query)
-            .populate({
-                path: 'classId',
-                select: 'name level',
-                match: { level: { $ne: null } }
-            })
-            .select('topicName')
-            .lean();
-
-        // Filter valid outcomes (with valid classId) and extract unique topics
-        // Use same logic as getLearningOutcomesByTopic: null/undefined topicName becomes 'No Topic'
-        const validOutcomes = outcomes.filter(o => {
-            try {
-                if (!o || !o.classId || !o.classId.level) {
-                    return false;
-                }
-                return true;
-            } catch (err) {
-                return false;
-            }
-        });
-
-        // Extract unique topics (normalize null/undefined to 'No Topic')
-        // Count learning outcomes per topic to ensure we only show topics with outcomes
-        const topicMap = new Map();
-        validOutcomes.forEach(outcome => {
-            const topic = outcome.topicName || 'No Topic';
-            if (!topicMap.has(topic)) {
-                topicMap.set(topic, 0);
-            }
-            topicMap.set(topic, topicMap.get(topic) + 1);
-        });
-
-        // Only include topics that have at least one learning outcome
-        const topics = Array.from(topicMap.keys()).filter(topic => topicMap.get(topic) > 0);
+        // Use shared helper function
+        const topics = await getTopicsWithLearningOutcomes(type, subjectId);
 
         // Get concept graph status for each topic
         const topicsWithStatus = await Promise.all(
-            topics.map(async (topicName) => {
-                const graphQuery = { topic: topicName, type };
-                if (type === 'SUBJECT' && subjectId) {
-                    graphQuery.subjectId = subjectId;
+            topics.map(async (topic) => {
+                const graphQuery = { topic: topic.topicName, type };
+                // For SUBJECT type, subjectId is optional
+                if (type === 'SUBJECT' && (topic.subjectId || subjectId)) {
+                    graphQuery.subjectId = topic.subjectId || subjectId;
                 } else if (type === 'SUBJECT') {
-                    graphQuery.subjectId = subjectId || null;
+                    graphQuery.subjectId = topic.subjectId || subjectId || null;
                 }
+                // For BASIC_CALCULATION, subjectId is ignored
 
                 const conceptGraph = await ConceptGraph.findOne(graphQuery).lean();
                 
                 return {
-                    topicName,
+                    topicName: topic.topicName,
                     hasConceptGraph: !!conceptGraph,
                     lastCalculatedAt: conceptGraph?.lastCalculatedAt || null,
                     totalConcepts: conceptGraph?.totalConcepts || 0,
                     totalNodes: conceptGraph?.totalNodes || 0,
                     totalEdges: conceptGraph?.totalEdges || 0,
-                    learningOutcomeCount: topicMap.get(topicName) || 0
+                    learningOutcomeCount: topic.learningOutcomeCount || 0
                 };
             })
         );
@@ -1469,12 +1527,18 @@ const getTopicList = async (req, res) => {
 };
 
 // Sync all concept graphs (background process)
+// Uses same topic list logic as getTopicList - only topics with learning outcomes
 const syncAllConceptGraphs = async (req, res) => {
     try {
         const { type, subjectId } = req.query;
 
         if (!type) {
             return res.status(400).json({ message: 'type is required' });
+        }
+
+        // Validate type
+        if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+            return res.status(400).json({ message: 'type must be SUBJECT or BASIC_CALCULATION' });
         }
 
         // Start background process
@@ -1487,32 +1551,48 @@ const syncAllConceptGraphs = async (req, res) => {
         // Run in background
         (async () => {
             try {
-                const query = { type };
-                if (type === 'SUBJECT' && subjectId) {
-                    query.subjectId = subjectId;
-                }
-
-                // Get all distinct topics
-                const topics = await LearningOutcome.distinct('topicName', query);
+                // Use shared helper function to get topics with learning outcomes
+                const topics = await getTopicsWithLearningOutcomes(type, subjectId);
                 
-                console.log(`[Concept Graph Sync] Starting sync for ${topics.length} topics...`);
+                console.log(`[Concept Graph Sync] Starting sync for ${topics.length} topics (only topics with learning outcomes)...`);
 
                 let successCount = 0;
                 let errorCount = 0;
                 const errors = [];
 
-                for (const topicName of topics) {
+                for (const { topicName, subjectId: topicSubjectId } of topics) {
                     try {
                         // Get subject name from first learning outcome
-                        const sampleOutcome = await LearningOutcome.findOne({ 
-                            topicName, 
-                            type,
-                            ...(type === 'SUBJECT' && subjectId ? { subjectId } : {})
-                        }).populate('subjectId', 'name').lean();
+                        const query = { 
+                            topicName: topicName === 'No Topic' ? null : topicName, 
+                            type
+                        };
+                        // For SUBJECT type, include subjectId in query
+                        if (type === 'SUBJECT' && (topicSubjectId || subjectId)) {
+                            query.subjectId = topicSubjectId || subjectId;
+                        }
+                        // For BASIC_CALCULATION, subjectId is ignored
 
-                        const subjectName = sampleOutcome?.subjectId?.name || 'Mathematics';
-                        const outcomeSubjectId = sampleOutcome?.subjectId?._id || subjectId;
+                        const sampleOutcome = await LearningOutcome.findOne(query)
+                        .populate('subjectId', 'name')
+                        .populate({
+                            path: 'classId',
+                            select: 'name level',
+                            match: { level: { $ne: null } }
+                        })
+                        .lean();
 
+                        // Skip if no valid outcome found
+                        if (!sampleOutcome || !sampleOutcome.classId) {
+                            console.log(`[Concept Graph Sync] ⚠ Skipping ${topicName} - no valid learning outcomes`);
+                            continue;
+                        }
+
+                        // For BASIC_CALCULATION, subjectId should be null
+                        const subjectName = type === 'BASIC_CALCULATION' ? 'Basic Calculation' : (sampleOutcome?.subjectId?.name || 'Mathematics');
+                        const outcomeSubjectId = type === 'BASIC_CALCULATION' ? null : (sampleOutcome?.subjectId?._id?.toString() || topicSubjectId?.toString() || subjectId);
+
+                        // Calculate and save to DB
                         await calculateAndSaveConceptGraph(topicName, type, outcomeSubjectId, subjectName);
                         successCount++;
                         console.log(`[Concept Graph Sync] ✓ ${topicName} (${successCount}/${topics.length})`);
@@ -1542,6 +1622,101 @@ const syncAllConceptGraphs = async (req, res) => {
     }
 };
 
+// Sync all topic tag mappings (background process)
+// Uses same topic list logic as getTopicList - only topics with learning outcomes
+const syncAllTopicTagMappings = async (req, res) => {
+    try {
+        const { type, subjectId } = req.query;
+
+        if (!type) {
+            return res.status(400).json({ message: 'type is required' });
+        }
+
+        // Validate type
+        if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+            return res.status(400).json({ message: 'type must be SUBJECT or BASIC_CALCULATION' });
+        }
+
+        // Start background process
+        res.json({
+            success: true,
+            message: 'Topic tag mappings sync started in background. This may take several minutes.',
+            status: 'processing'
+        });
+
+        // Run in background
+        (async () => {
+            try {
+                // Use shared helper function to get topics with learning outcomes
+                const topics = await getTopicsWithLearningOutcomes(type, subjectId);
+                
+                console.log(`[Topic Tag Mapping Sync] Starting sync for ${topics.length} topics (only topics with learning outcomes)...`);
+
+                let successCount = 0;
+                let errorCount = 0;
+                const errors = [];
+
+                for (const { topicName, subjectId: topicSubjectId } of topics) {
+                    try {
+                        // Get subject name from first learning outcome
+                        const query = { 
+                            topicName: topicName === 'No Topic' ? null : topicName, 
+                            type
+                        };
+                        // For SUBJECT type, include subjectId in query
+                        if (type === 'SUBJECT' && (topicSubjectId || subjectId)) {
+                            query.subjectId = topicSubjectId || subjectId;
+                        }
+                        // For BASIC_CALCULATION, subjectId is ignored
+
+                        const sampleOutcome = await LearningOutcome.findOne(query)
+                        .populate('subjectId', 'name')
+                        .populate({
+                            path: 'classId',
+                            select: 'name level',
+                            match: { level: { $ne: null } }
+                        })
+                        .lean();
+
+                        // Skip if no valid outcome found
+                        if (!sampleOutcome || !sampleOutcome.classId) {
+                            console.log(`[Topic Tag Mapping Sync] ⚠ Skipping ${topicName} - no valid learning outcomes`);
+                            continue;
+                        }
+
+                        // For BASIC_CALCULATION, subjectId should be null
+                        const outcomeSubjectId = type === 'BASIC_CALCULATION' ? null : (sampleOutcome?.subjectId?._id?.toString() || topicSubjectId?.toString() || subjectId);
+
+                        // Calculate and save to DB
+                        await calculateAndSaveTopicTagMappings(topicName, type, outcomeSubjectId);
+                        successCount++;
+                        console.log(`[Topic Tag Mapping Sync] ✓ ${topicName} (${successCount}/${topics.length})`);
+                    } catch (error) {
+                        errorCount++;
+                        errors.push({ topic: topicName, error: error.message });
+                        console.error(`[Topic Tag Mapping Sync] ✗ ${topicName}: ${error.message}`);
+                    }
+                }
+
+                console.log(`[Topic Tag Mapping Sync] Complete! Success: ${successCount}, Errors: ${errorCount}`);
+                if (errors.length > 0) {
+                    console.error('[Topic Tag Mapping Sync] Errors:', errors);
+                }
+
+            } catch (error) {
+                console.error('[Topic Tag Mapping Sync] Fatal error:', error);
+            }
+        })();
+
+    } catch (err) {
+        console.error('Error in syncAllTopicTagMappings:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
 module.exports = {
     mapLearningOutcomesToCurriculum,
     getLearningOutcomeCurriculumMapping,
@@ -1554,5 +1729,6 @@ module.exports = {
     calculateAndSaveConceptGraph, // Export for concept graph calculation
     getConceptGraph,
     getTopicList,
-    syncAllConceptGraphs
+    syncAllConceptGraphs,
+    syncAllTopicTagMappings
 };
