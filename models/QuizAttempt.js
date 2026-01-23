@@ -12,8 +12,8 @@ const quizAttemptSchema = new mongoose.Schema({
     },
     quizType: {
         type: String,
-        enum: ['BASIC_CALCULATION', 'ADVANCED_ALGEBRA', 'THERMODYNAMICS'],
         required: true
+        // Can be 'BASIC_CALCULATION' or any topic name (e.g., 'Mensuration', 'Numbers', etc.)
     },
     totalQuestions: {
         type: Number,
