@@ -17,6 +17,16 @@ const userSchema = new mongoose.Schema({
     name: { type: String },
     mobile: { type: String, unique: true, sparse: true },
     isVerified: { type: Boolean, default: false },
+    grade: { type: String },
+    avatar: { type: String },
+    
+    // Quiz progress tracking
+    passedBasicCalculationClass: { type: Number }, // Highest passed class level
+    passedClasses: {
+        BASIC_CALCULATION: { type: Number },
+        ADVANCED_ALGEBRA: { type: Number },
+        THERMODYNAMICS: { type: Number }
+    },
 
     // OTP fields (for verification & password reset)
     otp: { type: String },

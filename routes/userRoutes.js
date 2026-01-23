@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
 const {
     registerUser,
     verifyOTP,
@@ -11,22 +12,42 @@ const {
     getBasicCalculationLearningOutcomes,
     getConceptsWithTags,
 } = require('../controllers/userAuthController');
+const {
+    submitQuiz,
+    getQuizHistory,
+    getQuizAttempt,
+    getUserProgress
+} = require('../controllers/userQuizController');
+const {
+    getUserProfile,
+    getTopicsForClass
+} = require('../controllers/userProfileController');
 
-// Registration flow
+// Public routes - Registration flow
 router.post('/register', registerUser);
 router.post('/verify-otp', verifyOTP);
 router.post('/resend-otp', resendOTP);
 
-// Login
+// Public routes - Login
 router.post('/login', loginUser);
 
-// Password reset flow
+// Public routes - Password reset flow
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 
-// Class and Learning Outcomes
+// Public routes - Class and Learning Outcomes
 router.get('/classes', getClassList);
 router.get('/learning-outcomes/basic-calculation/:classLevel', getBasicCalculationLearningOutcomes);
 router.get('/concepts-with-tags/:classLevel', getConceptsWithTags);
+
+// Protected routes - Profile Management
+router.get('/profile', protect, getUserProfile);
+router.get('/classes/:classLevel/topics', protect, getTopicsForClass);
+
+// Protected routes - Quiz Management
+router.post('/quiz/submit', protect, submitQuiz);
+router.get('/quiz/history', protect, getQuizHistory);
+router.get('/quiz/attempt/:attemptId', protect, getQuizAttempt);
+router.get('/progress', protect, getUserProgress);
 
 module.exports = router;
