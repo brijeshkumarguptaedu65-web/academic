@@ -735,6 +735,153 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
 };
 
 // Recalculate learning outcome to learning outcome mapping
+// Get tag-wise mappings for a specific topic using DeepSeek API
+const getTopicTagMappings = async (req, res) => {
+    try {
+        const { topicName } = req.params;
+        const { subjectId, type } = req.query;
+
+        if (!topicName) {
+            return res.status(400).json({ 
+                message: 'topicName is required' 
+            });
+        }
+
+        if (!type) {
+            return res.status(400).json({ 
+                message: 'type is required' 
+            });
+        }
+
+        // Get all learning outcomes for this topic
+        const query = { 
+            topicName: topicName,
+            type: type
+        };
+
+        if (type === 'SUBJECT' && subjectId) {
+            query.subjectId = subjectId;
+        }
+
+        const topicOutcomes = await LearningOutcome.find(query)
+            .populate({
+                path: 'classId',
+                select: 'name level',
+                match: { level: { $ne: null } }
+            })
+            .populate('subjectId', 'name')
+            .sort({ 'classId.level': 1 })
+            .lean();
+
+        // Filter valid outcomes
+        const validOutcomes = topicOutcomes.filter(o => o && o.classId && o.classId.level);
+
+        if (validOutcomes.length === 0) {
+            return res.json({
+                success: true,
+                topicName: topicName,
+                totalLearningOutcomes: 0,
+                tagMappings: []
+            });
+        }
+
+        // Extract all tags from all outcomes in this topic
+        const allTags = [];
+        validOutcomes.forEach(outcome => {
+            const tags = extractTags(outcome.text);
+            tags.forEach(tag => {
+                allTags.push({
+                    tag: tag,
+                    learningOutcomeId: outcome._id.toString(),
+                    learningOutcomeText: outcome.text,
+                    classLevel: outcome.classId.level,
+                    className: outcome.classId.name
+                });
+            });
+        });
+
+        // Compare each tag with every other tag in the topic
+        const tagMappings = [];
+        const processedPairs = new Set();
+
+        for (let i = 0; i < allTags.length; i++) {
+            for (let j = i + 1; j < allTags.length; j++) {
+                const tagA = allTags[i];
+                const tagB = allTags[j];
+
+                // Skip if same learning outcome
+                if (tagA.learningOutcomeId === tagB.learningOutcomeId) {
+                    continue;
+                }
+
+                // Create unique pair key to avoid duplicates
+                const pairKey = `${tagA.tag}|||${tagB.tag}`;
+                const reversePairKey = `${tagB.tag}|||${tagA.tag}`;
+                
+                if (processedPairs.has(pairKey) || processedPairs.has(reversePairKey)) {
+                    continue;
+                }
+                processedPairs.add(pairKey);
+
+                try {
+                    // Get relevancy using DeepSeek API
+                    const relevancy = await getTagRelevancy(
+                        tagA.tag,
+                        tagB.tag,
+                        tagA.classLevel,
+                        tagB.classLevel
+                    );
+
+                    // Only include if relevance score >= 0.6 (60%)
+                    if (relevancy.relevancyScore >= 0.6) {
+                        tagMappings.push({
+                            fromTag: {
+                                tag: tagA.tag,
+                                learningOutcomeId: tagA.learningOutcomeId,
+                                learningOutcomeText: tagA.learningOutcomeText,
+                                classLevel: tagA.classLevel,
+                                className: tagA.className
+                            },
+                            toTag: {
+                                tag: tagB.tag,
+                                learningOutcomeId: tagB.learningOutcomeId,
+                                learningOutcomeText: tagB.learningOutcomeText,
+                                classLevel: tagB.classLevel,
+                                className: tagB.className
+                            },
+                            relevanceScore: relevancy.relevancyScore,
+                            relation: relevancy.relation,
+                            reason: relevancy.reason
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Error comparing tags ${tagA.tag} and ${tagB.tag}:`, err.message);
+                    // Continue with next pair
+                }
+            }
+        }
+
+        // Sort by relevance score (descending)
+        tagMappings.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+        res.json({
+            success: true,
+            topicName: topicName,
+            totalLearningOutcomes: validOutcomes.length,
+            totalTags: allTags.length,
+            totalMappings: tagMappings.length,
+            tagMappings: tagMappings
+        });
+
+    } catch (err) {
+        console.error('Error in getTopicTagMappings:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
 const recalculateLearningOutcomeMapping = async (req, res) => {
     try {
         const { learningOutcomeId } = req.params;
@@ -818,5 +965,6 @@ module.exports = {
     recalculateCurriculumMapping,
     calculateAndSaveCurriculumMapping, // Export for use in other controllers
     calculateAndSaveLearningOutcomeMapping, // Export for learning outcome to learning outcome mapping
-    recalculateLearningOutcomeMapping
+    recalculateLearningOutcomeMapping,
+    getTopicTagMappings
 };

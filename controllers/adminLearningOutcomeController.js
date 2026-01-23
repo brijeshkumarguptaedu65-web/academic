@@ -341,9 +341,117 @@ const deleteLearningOutcome = async (req, res) => {
     }
 };
 
+// Get learning outcomes grouped by topic
+const getLearningOutcomesByTopic = async (req, res) => {
+    try {
+        const { subjectId, type } = req.query;
+
+        if (!type) {
+            return res.status(400).json({ 
+                message: 'type is required' 
+            });
+        }
+
+        // Validate type
+        if (!['SUBJECT', 'BASIC_CALCULATION'].includes(type)) {
+            return res.status(400).json({ 
+                message: 'type must be SUBJECT or BASIC_CALCULATION' 
+            });
+        }
+
+        const query = { type };
+
+        // For SUBJECT type, subjectId is optional
+        if (type === 'SUBJECT' && subjectId) {
+            query.subjectId = subjectId;
+        }
+
+        const outcomes = await LearningOutcome.find(query)
+            .populate({
+                path: 'classId',
+                select: 'name level',
+                match: { level: { $ne: null } }
+            })
+            .populate('subjectId', 'name')
+            .sort({ 'classId.level': 1, topicName: 1, createdAt: 1 })
+            .lean();
+
+        // Filter out outcomes with null classId
+        const validOutcomes = outcomes.filter(o => {
+            try {
+                if (!o || !o.classId || !o.classId.level) {
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                return false;
+            }
+        });
+
+        // Group by topic
+        const groupedByTopic = {};
+
+        validOutcomes.forEach(outcome => {
+            const topic = outcome.topicName || 'No Topic';
+            
+            if (!groupedByTopic[topic]) {
+                groupedByTopic[topic] = {
+                    topicName: topic,
+                    learningOutcomes: []
+                };
+            }
+
+            groupedByTopic[topic].learningOutcomes.push({
+                id: outcome._id.toString(),
+                text: outcome.text,
+                tags: outcome.text ? outcome.text.split(',').map(t => t.trim()) : [],
+                classId: {
+                    _id: outcome.classId._id.toString(),
+                    name: outcome.classId.name,
+                    level: outcome.classId.level
+                },
+                subjectId: outcome.subjectId ? {
+                    _id: outcome.subjectId._id.toString(),
+                    name: outcome.subjectId.name
+                } : null,
+                type: outcome.type,
+                createdAt: outcome.createdAt,
+                updatedAt: outcome.updatedAt
+            });
+        });
+
+        // Convert to array and sort
+        const topics = Object.values(groupedByTopic).sort((a, b) => {
+            if (a.topicName === 'No Topic') return 1;
+            if (b.topicName === 'No Topic') return -1;
+            return a.topicName.localeCompare(b.topicName);
+        });
+
+        // Sort learning outcomes within each topic by class level
+        topics.forEach(topic => {
+            topic.learningOutcomes.sort((a, b) => a.classId.level - b.classId.level);
+        });
+
+        res.json({
+            success: true,
+            totalTopics: topics.length,
+            totalLearningOutcomes: validOutcomes.length,
+            topics: topics
+        });
+
+    } catch (err) {
+        console.error('Error in getLearningOutcomesByTopic:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
 module.exports = {
     getLearningOutcomes,
     createLearningOutcome,
     updateLearningOutcome,
-    deleteLearningOutcome
+    deleteLearningOutcome,
+    getLearningOutcomesByTopic
 };

@@ -48,7 +48,8 @@ const {
     getLearningOutcomes,
     createLearningOutcome,
     updateLearningOutcome,
-    deleteLearningOutcome
+    deleteLearningOutcome,
+    getLearningOutcomesByTopic
 } = require('../controllers/adminLearningOutcomeController');
 
 const {
@@ -69,7 +70,8 @@ const {
     mapLearningOutcomesToCurriculum,
     getLearningOutcomeCurriculumMapping,
     recalculateCurriculumMapping,
-    recalculateLearningOutcomeMapping
+    recalculateLearningOutcomeMapping,
+    getTopicTagMappings
 } = require('../controllers/adminCurriculumController');
 
 // All routes protected + admin only
@@ -123,6 +125,7 @@ router.delete('/tests/:id', deleteTest);
 
 // 2.8 Learning Outcomes
 router.get('/learning-outcomes', getLearningOutcomes);
+router.get('/learning-outcomes/by-topic', getLearningOutcomesByTopic);
 router.post('/learning-outcomes', createLearningOutcome);
 router.put('/learning-outcomes/:id', updateLearningOutcome);
 router.delete('/learning-outcomes/:id', deleteLearningOutcome);
@@ -149,5 +152,8 @@ router.post('/curriculum/learning-outcomes/:learningOutcomeId/recalculate', reca
 
 // 2.10.1 Learning Outcome to Learning Outcome Mapping
 router.post('/curriculum/learning-outcomes/:learningOutcomeId/recalculate-mapping', recalculateLearningOutcomeMapping);
+
+// 2.10.2 Topic Tag Mappings (AI-powered)
+router.get('/curriculum/topics/:topicName/tag-mappings', getTopicTagMappings);
 
 module.exports = router;
