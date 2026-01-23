@@ -1,0 +1,613 @@
+{
+  "subject": "Mathematics",
+  "topic": "Numbers",
+  "graphType": "concept_wise_vertical_learning_graph",
+  "conceptGraphs": [
+    {
+      "concept": "Place Value",
+      "nodes": [
+        {
+          "id": "pv_3_1",
+          "class": 3,
+          "tag": "Reads and writes three-digit numbers up to 999 using place value."
+        },
+        {
+          "id": "pv_3_2",
+          "class": 3,
+          "tag": "Compares and orders numbers up to 999 based on their place value."
+        },
+        {
+          "id": "pv_5_1",
+          "class": 5,
+          "tag": "Reads and writes large numbers (greater than 1000) used in daily life situations."
+        },
+        {
+          "id": "pv_5_2",
+          "class": 5,
+          "tag": "Uses place value understanding to perform addition, subtraction, multiplication and division on numbers greater than 1000."
+        }
+      ],
+      "edges": [
+        {
+          "from": "pv_3_1",
+          "to": "pv_5_1"
+        },
+        {
+          "from": "pv_3_2",
+          "to": "pv_5_1"
+        },
+        {
+          "from": "pv_5_1",
+          "to": "pv_5_2"
+        }
+      ]
+    },
+    {
+      "concept": "Addition and Subtraction",
+      "nodes": [
+        {
+          "id": "as_3_1",
+          "class": 3,
+          "tag": "Adds three-digit numbers with and without regrouping where the sum does not exceed 999."
+        },
+        {
+          "id": "as_3_2",
+          "class": 3,
+          "tag": "Subtracts three-digit numbers with and without regrouping."
+        },
+        {
+          "id": "as_3_3",
+          "class": 3,
+          "tag": "Solves simple daily life problems involving addition and subtraction of three-digit numbers."
+        },
+        {
+          "id": "as_4_1",
+          "class": 4,
+          "tag": "Applies number operations to solve problems in daily life situations."
+        },
+        {
+          "id": "as_5_1",
+          "class": 5,
+          "tag": "Uses place value understanding to perform addition, subtraction, multiplication and division on numbers greater than 1000."
+        },
+        {
+          "id": "as_5_2",
+          "class": 5,
+          "tag": "Estimates the sum, difference, product and quotient of numbers."
+        },
+        {
+          "id": "as_5_3",
+          "class": 5,
+          "tag": "Verifies estimated answers using different strategies such as standard algorithms and breaking numbers into parts."
+        },
+        {
+          "id": "as_6_1",
+          "class": 6,
+          "tag": "Solves problems involving large numbers by applying appropriate operations such as addition, subtraction, multiplication and division."
+        },
+        {
+          "id": "as_6_2",
+          "class": 6,
+          "tag": "Solves problems involving addition and subtraction of integers."
+        },
+        {
+          "id": "as_6_3",
+          "class": 6,
+          "tag": "Solves daily life problems involving addition and subtraction of fractions and decimals."
+        },
+        {
+          "id": "as_7_1",
+          "class": 7,
+          "tag": "Solves daily life problems involving rational numbers."
+        },
+        {
+          "id": "as_8_1",
+          "class": 8,
+          "tag": "Generalises the properties of addition, subtraction, multiplication and division of rational numbers through patterns."
+        }
+      ],
+      "edges": [
+        {
+          "from": "as_3_1",
+          "to": "as_4_1"
+        },
+        {
+          "from": "as_3_2",
+          "to": "as_4_1"
+        },
+        {
+          "from": "as_3_3",
+          "to": "as_4_1"
+        },
+        {
+          "from": "as_4_1",
+          "to": "as_5_1"
+        },
+        {
+          "from": "as_5_1",
+          "to": "as_5_2"
+        },
+        {
+          "from": "as_5_2",
+          "to": "as_5_3"
+        },
+        {
+          "from": "as_5_3",
+          "to": "as_6_1"
+        },
+        {
+          "from": "as_6_1",
+          "to": "as_6_2"
+        },
+        {
+          "from": "as_6_2",
+          "to": "as_6_3"
+        },
+        {
+          "from": "as_6_3",
+          "to": "as_7_1"
+        },
+        {
+          "from": "as_7_1",
+          "to": "as_8_1"
+        }
+      ]
+    },
+    {
+      "concept": "Multiplication and Division",
+      "nodes": [
+        {
+          "id": "md_3_1",
+          "class": 3,
+          "tag": "Constructs and uses multiplication tables of 2, 3, 4, 5 and 10 in daily life situations."
+        },
+        {
+          "id": "md_3_2",
+          "class": 3,
+          "tag": "Analyses a given situation and selects the appropriate number operation."
+        },
+        {
+          "id": "md_3_3",
+          "class": 3,
+          "tag": "Explains division as equal grouping or equal sharing."
+        },
+        {
+          "id": "md_3_4",
+          "class": 3,
+          "tag": "Finds division facts using repeated subtraction (e.g., 12 ÷ 3)."
+        },
+        {
+          "id": "md_4_1",
+          "class": 4,
+          "tag": "Applies number operations to solve problems in daily life situations."
+        },
+        {
+          "id": "md_4_2",
+          "class": 4,
+          "tag": "Multiplies two-digit numbers by one-digit numbers."
+        },
+        {
+          "id": "md_4_3",
+          "class": 4,
+          "tag": "Multiplies three-digit numbers by one-digit numbers."
+        },
+        {
+          "id": "md_4_4",
+          "class": 4,
+          "tag": "Divides a number using pictorial representation, equal grouping and repeated subtraction."
+        },
+        {
+          "id": "md_4_5",
+          "class": 4,
+          "tag": "Explains division using the relationship between multiplication and division."
+        },
+        {
+          "id": "md_5_1",
+          "class": 5,
+          "tag": "Uses place value understanding to perform addition, subtraction, multiplication and division on numbers greater than 1000."
+        },
+        {
+          "id": "md_5_2",
+          "class": 5,
+          "tag": "Divides a given number by another number using standard division algorithms."
+        },
+        {
+          "id": "md_5_3",
+          "class": 5,
+          "tag": "Estimates the sum, difference, product and quotient of numbers."
+        },
+        {
+          "id": "md_5_4",
+          "class": 5,
+          "tag": "Verifies estimated answers using different strategies such as standard algorithms and breaking numbers into parts."
+        },
+        {
+          "id": "md_6_1",
+          "class": 6,
+          "tag": "Solves problems involving large numbers by applying appropriate operations such as addition, subtraction, multiplication and division."
+        },
+        {
+          "id": "md_7_1",
+          "class": 7,
+          "tag": "Multiplies and divides two integers."
+        },
+        {
+          "id": "md_8_1",
+          "class": 8,
+          "tag": "Generalises the properties of addition, subtraction, multiplication and division of rational numbers through patterns."
+        },
+        {
+          "id": "md_8_2",
+          "class": 8,
+          "tag": "Explains and proves the divisibility rules of 2, 3, 4, 5, 6, 9 and 11 using patterns and examples."
+        }
+      ],
+      "edges": [
+        {
+          "from": "md_3_1",
+          "to": "md_4_1"
+        },
+        {
+          "from": "md_3_2",
+          "to": "md_4_1"
+        },
+        {
+          "from": "md_3_3",
+          "to": "md_4_4"
+        },
+        {
+          "from": "md_3_4",
+          "to": "md_4_4"
+        },
+        {
+          "from": "md_4_1",
+          "to": "md_4_2"
+        },
+        {
+          "from": "md_4_2",
+          "to": "md_4_3"
+        },
+        {
+          "from": "md_4_3",
+          "to": "md_4_4"
+        },
+        {
+          "from": "md_4_4",
+          "to": "md_4_5"
+        },
+        {
+          "from": "md_4_5",
+          "to": "md_5_1"
+        },
+        {
+          "from": "md_5_1",
+          "to": "md_5_2"
+        },
+        {
+          "from": "md_5_2",
+          "to": "md_5_3"
+        },
+        {
+          "from": "md_5_3",
+          "to": "md_5_4"
+        },
+        {
+          "from": "md_5_4",
+          "to": "md_6_1"
+        },
+        {
+          "from": "md_6_1",
+          "to": "md_7_1"
+        },
+        {
+          "from": "md_7_1",
+          "to": "md_8_1"
+        },
+        {
+          "from": "md_8_1",
+          "to": "md_8_2"
+        }
+      ]
+    },
+    {
+      "concept": "Fractions",
+      "nodes": [
+        {
+          "id": "fr_4_1",
+          "class": 4,
+          "tag": "Identifies one-half, one-fourth and three-fourths of a whole using pictures and paper folding."
+        },
+        {
+          "id": "fr_4_2",
+          "class": 4,
+          "tag": "Identifies one-half, one-fourth and three-fourths in a collection of objects."
+        },
+        {
+          "id": "fr_4_3",
+          "class": 4,
+          "tag": "Represents one-half, one-fourth and three-fourths using numerals."
+        },
+        {
+          "id": "fr_4_4",
+          "class": 4,
+          "tag": "Demonstrates the equivalence of fractions using models and examples."
+        },
+        {
+          "id": "fr_5_1",
+          "class": 5,
+          "tag": "Finds the number corresponding to a given fractional part of a collection."
+        },
+        {
+          "id": "fr_5_2",
+          "class": 5,
+          "tag": "Identifies and forms equivalent fractions of a given fraction."
+        },
+        {
+          "id": "fr_6_1",
+          "class": 6,
+          "tag": "Uses fractions and decimals to represent and solve problems related to money, length, distance and temperature."
+        },
+        {
+          "id": "fr_6_2",
+          "class": 6,
+          "tag": "Solves daily life problems involving addition and subtraction of fractions and decimals."
+        },
+        {
+          "id": "fr_7_1",
+          "class": 7,
+          "tag": "Interprets multiplication of fractions as a part of a part (e.g., 2/3 × 4/5 as two-thirds of four-fifths)."
+        },
+        {
+          "id": "fr_7_2",
+          "class": 7,
+          "tag": "Interprets division of fractions as finding how many equal parts make a whole (e.g., 1/2 ÷ 1/4)."
+        },
+        {
+          "id": "fr_7_3",
+          "class": 7,
+          "tag": "Uses standard algorithms to multiply and divide fractions."
+        },
+        {
+          "id": "fr_7_4",
+          "class": 7,
+          "tag": "Solves daily life problems involving rational numbers."
+        },
+        {
+          "id": "fr_8_1",
+          "class": 8,
+          "tag": "Generalises the properties of addition, subtraction, multiplication and division of rational numbers through patterns."
+        },
+        {
+          "id": "fr_8_2",
+          "class": 8,
+          "tag": "Finds as many rational numbers as possible between two given rational numbers."
+        }
+      ],
+      "edges": [
+        {
+          "from": "fr_4_1",
+          "to": "fr_4_2"
+        },
+        {
+          "from": "fr_4_2",
+          "to": "fr_4_3"
+        },
+        {
+          "from": "fr_4_3",
+          "to": "fr_4_4"
+        },
+        {
+          "from": "fr_4_4",
+          "to": "fr_5_1"
+        },
+        {
+          "from": "fr_5_1",
+          "to": "fr_5_2"
+        },
+        {
+          "from": "fr_5_2",
+          "to": "fr_6_1"
+        },
+        {
+          "from": "fr_6_1",
+          "to": "fr_6_2"
+        },
+        {
+          "from": "fr_6_2",
+          "to": "fr_7_1"
+        },
+        {
+          "from": "fr_7_1",
+          "to": "fr_7_2"
+        },
+        {
+          "from": "fr_7_2",
+          "to": "fr_7_3"
+        },
+        {
+          "from": "fr_7_3",
+          "to": "fr_7_4"
+        },
+        {
+          "from": "fr_7_4",
+          "to": "fr_8_1"
+        },
+        {
+          "from": "fr_8_1",
+          "to": "fr_8_2"
+        }
+      ]
+    },
+    {
+      "concept": "Decimals",
+      "nodes": [
+        {
+          "id": "dc_5_1",
+          "class": 5,
+          "tag": "Expresses fractions such as 1/2, 1/4 and 1/5 in decimal notation."
+        },
+        {
+          "id": "dc_5_2",
+          "class": 5,
+          "tag": "Expresses decimals as fractions in real-life contexts such as length and money."
+        },
+        {
+          "id": "dc_5_3",
+          "class": 5,
+          "tag": "Converts fractions into decimals and decimals into fractions."
+        },
+        {
+          "id": "dc_6_1",
+          "class": 6,
+          "tag": "Uses fractions and decimals to represent and solve problems related to money, length, distance and temperature."
+        },
+        {
+          "id": "dc_6_2",
+          "class": 6,
+          "tag": "Solves daily life problems involving addition and subtraction of fractions and decimals."
+        },
+        {
+          "id": "dc_7_1",
+          "class": 7,
+          "tag": "Uses standard algorithms to multiply and divide decimals."
+        },
+        {
+          "id": "dc_7_2",
+          "class": 7,
+          "tag": "Solves daily life problems involving rational numbers."
+        },
+        {
+          "id": "dc_8_1",
+          "class": 8,
+          "tag": "Generalises the properties of addition, subtraction, multiplication and division of rational numbers through patterns."
+        }
+      ],
+      "edges": [
+        {
+          "from": "dc_5_1",
+          "to": "dc_5_2"
+        },
+        {
+          "from": "dc_5_2",
+          "to": "dc_5_3"
+        },
+        {
+          "from": "dc_5_3",
+          "to": "dc_6_1"
+        },
+        {
+          "from": "dc_6_1",
+          "to": "dc_6_2"
+        },
+        {
+          "from": "dc_6_2",
+          "to": "dc_7_1"
+        },
+        {
+          "from": "dc_7_1",
+          "to": "dc_7_2"
+        },
+        {
+          "from": "dc_7_2",
+          "to": "dc_8_1"
+        }
+      ]
+    },
+    {
+      "concept": "Number Properties",
+      "nodes": [
+        {
+          "id": "np_6_1",
+          "class": 6,
+          "tag": "Identifies and classifies numbers as even, odd, prime and co-prime using number patterns."
+        },
+        {
+          "id": "np_6_2",
+          "class": 6,
+          "tag": "Applies the concept of HCF or LCM to solve problems in given situations."
+        },
+        {
+          "id": "np_8_1",
+          "class": 8,
+          "tag": "Explains and proves the divisibility rules of 2, 3, 4, 5, 6, 9 and 11 using patterns and examples."
+        }
+      ],
+      "edges": [
+        {
+          "from": "np_6_1",
+          "to": "np_6_2"
+        },
+        {
+          "from": "np_6_2",
+          "to": "np_8_1"
+        }
+      ]
+    },
+    {
+      "concept": "Money and Measurement",
+      "nodes": [
+        {
+          "id": "mm_3_1",
+          "class": 3,
+          "tag": "Adds small amounts of money with and without regrouping."
+        },
+        {
+          "id": "mm_3_2",
+          "class": 3,
+          "tag": "Subtracts small amounts of money with and without regrouping."
+        },
+        {
+          "id": "mm_3_3",
+          "class": 3,
+          "tag": "Prepares simple rate charts."
+        },
+        {
+          "id": "mm_3_4",
+          "class": 3,
+          "tag": "Reads and prepares simple bills for daily life situations."
+        },
+        {
+          "id": "mm_4_1",
+          "class": 4,
+          "tag": "Creates and solves simple real-life problems involving money, length, mass and capacity using the four operations."
+        },
+        {
+          "id": "mm_5_1",
+          "class": 5,
+          "tag": "Expresses decimals as fractions in real-life contexts such as length and money."
+        },
+        {
+          "id": "mm_6_1",
+          "class": 6,
+          "tag": "Uses fractions and decimals to represent and solve problems related to money, length, distance and temperature."
+        }
+      ],
+      "edges": [
+        {
+          "from": "mm_3_1",
+          "to": "mm_4_1"
+        },
+        {
+          "from": "mm_3_2",
+          "to": "mm_4_1"
+        },
+        {
+          "from": "mm_3_3",
+          "to": "mm_4_1"
+        },
+        {
+          "from": "mm_3_4",
+          "to": "mm_4_1"
+        },
+        {
+          "from": "mm_4_1",
+          "to": "mm_5_1"
+        },
+        {
+          "from": "mm_5_1",
+          "to": "mm_6_1"
+        }
+      ]
+    }
+  ]
+}

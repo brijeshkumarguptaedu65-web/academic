@@ -245,6 +245,19 @@ const createLearningOutcome = async (req, res) => {
                 // Don't fail the request if mapping calculation fails
             });
 
+        // Calculate and save topic tag mappings in background
+        const { calculateAndSaveTopicTagMappings } = require('./adminCurriculumController');
+        if (outcome.topicName) {
+            calculateAndSaveTopicTagMappings(
+                outcome.topicName,
+                outcome.type,
+                outcome.subjectId ? outcome.subjectId._id || outcome.subjectId : null
+            ).catch(err => {
+                console.error(`Error calculating topic tag mappings for topic "${outcome.topicName}":`, err);
+                // Don't fail the request if topic mapping calculation fails
+            });
+        }
+
         const obj = populated.toObject();
         obj.id = obj._id;
         res.status(201).json(obj);
@@ -286,6 +299,18 @@ const updateLearningOutcome = async (req, res) => {
                 .catch(err => {
                     console.error('Error recalculating learning outcome mapping after update:', err);
                 });
+
+            // Recalculate topic tag mappings if topicName or text changed
+            if (outcome.topicName) {
+                const { calculateAndSaveTopicTagMappings } = require('./adminCurriculumController');
+                calculateAndSaveTopicTagMappings(
+                    outcome.topicName,
+                    outcome.type,
+                    outcome.subjectId ? outcome.subjectId._id || outcome.subjectId : null
+                ).catch(err => {
+                    console.error(`Error recalculating topic tag mappings for topic "${outcome.topicName}":`, err);
+                });
+            }
         }
 
         const obj = outcome.toObject();
@@ -332,6 +357,34 @@ const deleteLearningOutcome = async (req, res) => {
                 calculateAndSaveLearningOutcomeMapping(id).catch(err => {
                     console.error(`Error recalculating mapping for affected LO ${id}:`, err);
                 });
+            });
+        }
+
+        // Recalculate topic tag mappings for the deleted outcome's topic
+        if (outcome.topicName) {
+            const { calculateAndSaveTopicTagMappings } = require('./adminCurriculumController');
+            calculateAndSaveTopicTagMappings(
+                outcome.topicName,
+                outcome.type,
+                outcome.subjectId ? outcome.subjectId._id || outcome.subjectId : null
+            ).catch(err => {
+                console.error(`Error recalculating topic tag mappings for topic "${outcome.topicName}":`, err);
+            });
+        }
+
+        // Delete topic tag mappings if no learning outcomes remain for this topic
+        const TopicTagMapping = require('../models/TopicTagMapping');
+        const remainingOutcomes = await LearningOutcome.countDocuments({
+            topicName: outcome.topicName,
+            type: outcome.type,
+            subjectId: outcome.subjectId
+        });
+        
+        if (remainingOutcomes === 0) {
+            await TopicTagMapping.deleteOne({
+                topicName: outcome.topicName,
+                type: outcome.type,
+                subjectId: outcome.subjectId || null
             });
         }
 

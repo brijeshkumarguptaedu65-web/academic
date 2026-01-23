@@ -71,7 +71,10 @@ const {
     getLearningOutcomeCurriculumMapping,
     recalculateCurriculumMapping,
     recalculateLearningOutcomeMapping,
-    getTopicTagMappings
+    getTopicTagMappings,
+    getConceptGraph,
+    getTopicList,
+    syncAllConceptGraphs
 } = require('../controllers/adminCurriculumController');
 
 // All routes protected + admin only
@@ -155,5 +158,10 @@ router.post('/curriculum/learning-outcomes/:learningOutcomeId/recalculate-mappin
 
 // 2.10.2 Topic Tag Mappings (AI-powered)
 router.get('/curriculum/topics/:topicName/tag-mappings', getTopicTagMappings);
+
+// 2.10.3 Concept Graph (AI-powered, stored in DB)
+router.get('/curriculum/topics', getTopicList); // Get topic list with concept graph status
+router.get('/curriculum/topics/:topicName/concept-graph', getConceptGraph); // Get concept graph for a topic
+router.post('/curriculum/sync-concept-graphs', syncAllConceptGraphs); // Sync all concept graphs
 
 module.exports = router;

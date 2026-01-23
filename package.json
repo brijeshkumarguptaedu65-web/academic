@@ -7,10 +7,15 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "remove:learning-outcomes": "node remove_learning_outcomes.js",
     "calculate:mappings": "node calculate_all_learning_outcome_mappings.js",
+    "calculate:topic-mappings": "node calculate_all_topic_tag_mappings.js",
     "test:learning-outcomes": "node test_learning_outcomes_api.js",
     "show:learning-outcomes": "node show_learning_outcomes_by_topic.js",
+    "show:numbers": "node show_numbers_topic.js",
+    "generate:graph": "node generate_learning_graph.js",
+    "generate:concept-graph": "node generate_concept_graph.js",
     "test:api": "node test_api_response.js",
-    "test:topic-tag": "node test_topic_tag_api.js"
+    "test:topic-tag": "node test_topic_tag_api.js",
+    "test:topic-flow": "node test_topic_mapping_flow.js"
   },
   "keywords": [],
   "author": "",

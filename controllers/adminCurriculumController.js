@@ -2,6 +2,7 @@ const LearningOutcome = require('../models/LearningOutcome');
 const Chapter = require('../models/Chapter');
 const CurriculumMapping = require('../models/CurriculumMapping');
 const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
+const ConceptGraph = require('../models/ConceptGraph');
 const { Class, Subject } = require('../models/Metadata');
 const axios = require('axios');
 
@@ -747,23 +748,10 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
 };
 
 // Recalculate learning outcome to learning outcome mapping
-// Get tag-wise mappings for a specific topic using DeepSeek API
-const getTopicTagMappings = async (req, res) => {
+// Calculate and save topic tag mappings in background (using DeepSeek API)
+const calculateAndSaveTopicTagMappings = async (topicName, type, subjectId = null) => {
     try {
-        const { topicName } = req.params;
-        const { subjectId, type } = req.query;
-
-        if (!topicName) {
-            return res.status(400).json({ 
-                message: 'topicName is required' 
-            });
-        }
-
-        if (!type) {
-            return res.status(400).json({ 
-                message: 'type is required' 
-            });
-        }
+        console.log(`Calculating topic tag mappings for topic: ${topicName}, type: ${type}`);
 
         // Get all learning outcomes for this topic
         const query = { 
@@ -789,12 +777,24 @@ const getTopicTagMappings = async (req, res) => {
         const validOutcomes = topicOutcomes.filter(o => o && o.classId && o.classId.level);
 
         if (validOutcomes.length === 0) {
-            return res.json({
-                success: true,
-                topicName: topicName,
-                totalLearningOutcomes: 0,
-                tagMappings: []
-            });
+            // Save empty mapping
+            const TopicTagMapping = require('../models/TopicTagMapping');
+            await TopicTagMapping.findOneAndUpdate(
+                { topicName, type, subjectId: subjectId || null },
+                {
+                    topicName,
+                    type,
+                    subjectId: subjectId || null,
+                    tagMappings: [],
+                    tagChains: [],
+                    totalLearningOutcomes: 0,
+                    totalTags: 0,
+                    totalMappings: 0,
+                    lastCalculatedAt: new Date()
+                },
+                { upsert: true, new: true }
+            );
+            return { tagMappings: [], tagChains: [] };
         }
 
         // Extract all tags from all outcomes in this topic
@@ -820,7 +820,10 @@ const getTopicTagMappings = async (req, res) => {
         // Sort tags by class level
         allTags.sort((a, b) => a.classLevel - b.classLevel);
 
+        console.log(`Comparing ${allTags.length} tags for topic "${topicName}"...`);
+
         // Compare each tag with tags from higher classes only (progression chain)
+        let comparisonCount = 0;
         for (let i = 0; i < allTags.length; i++) {
             const tagA = allTags[i];
             
@@ -845,6 +848,11 @@ const getTopicTagMappings = async (req, res) => {
                     continue;
                 }
                 processedPairs.add(pairKey);
+
+                comparisonCount++;
+                if (comparisonCount % 10 === 0) {
+                    console.log(`  Progress: ${comparisonCount} comparisons, ${tagMappings.length} mappings found...`);
+                }
 
                 try {
                     // Get relevancy using DeepSeek API
@@ -885,11 +893,13 @@ const getTopicTagMappings = async (req, res) => {
                     // Small delay to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 200));
                 } catch (err) {
-                    console.error(`Error comparing tags ${tagA.tag.substring(0, 50)}... and ${tagB.tag.substring(0, 50)}...:`, err.message);
+                    console.error(`Error comparing tags:`, err.message);
                     // Continue with next pair
                 }
             }
         }
+
+        console.log(`✓ Completed ${comparisonCount} comparisons, found ${tagMappings.length} mappings with relevance >= 60%`);
 
         // Sort by class level (ascending) then by relevance score (descending)
         tagMappings.sort((a, b) => {
@@ -926,14 +936,80 @@ const getTopicTagMappings = async (req, res) => {
         // Convert chains to array and sort by class level
         const chains = Object.values(tagChains).sort((a, b) => a.classLevel - b.classLevel);
 
+        // Save to database
+        const TopicTagMapping = require('../models/TopicTagMapping');
+        await TopicTagMapping.findOneAndUpdate(
+            { topicName, type, subjectId: subjectId || null },
+            {
+                topicName,
+                type,
+                subjectId: subjectId || null,
+                tagMappings: tagMappings,
+                tagChains: chains,
+                totalLearningOutcomes: validOutcomes.length,
+                totalTags: allTags.length,
+                totalMappings: tagMappings.length,
+                lastCalculatedAt: new Date()
+            },
+            { upsert: true, new: true }
+        );
+
+        console.log(`✓ Saved topic tag mappings for "${topicName}" to database`);
+        return { tagMappings, tagChains: chains };
+    } catch (err) {
+        console.error(`Error calculating topic tag mappings for "${topicName}":`, err);
+        throw err;
+    }
+};
+
+// Get tag-wise mappings for a specific topic from database
+const getTopicTagMappings = async (req, res) => {
+    try {
+        const { topicName } = req.params;
+        const { subjectId, type } = req.query;
+
+        if (!topicName) {
+            return res.status(400).json({ 
+                message: 'topicName is required' 
+            });
+        }
+
+        if (!type) {
+            return res.status(400).json({ 
+                message: 'type is required' 
+            });
+        }
+
+        // Get mappings from database
+        const TopicTagMapping = require('../models/TopicTagMapping');
+        const mapping = await TopicTagMapping.findOne({
+            topicName: topicName,
+            type: type,
+            subjectId: subjectId || null
+        });
+
+        if (!mapping) {
+            return res.json({
+                success: true,
+                topicName: topicName,
+                totalLearningOutcomes: 0,
+                totalTags: 0,
+                totalMappings: 0,
+                tagMappings: [],
+                tagChains: [],
+                message: 'No mappings found. Mappings will be calculated in the background when learning outcomes are added/updated.'
+            });
+        }
+
         res.json({
             success: true,
-            topicName: topicName,
-            totalLearningOutcomes: validOutcomes.length,
-            totalTags: allTags.length,
-            totalMappings: tagMappings.length,
-            tagMappings: tagMappings, // Flat list of all mappings
-            tagChains: chains // Grouped by tag showing progression chains
+            topicName: mapping.topicName,
+            totalLearningOutcomes: mapping.totalLearningOutcomes,
+            totalTags: mapping.totalTags,
+            totalMappings: mapping.totalMappings,
+            tagMappings: mapping.tagMappings,
+            tagChains: mapping.tagChains,
+            lastCalculatedAt: mapping.lastCalculatedAt
         });
 
     } catch (err) {
@@ -1022,6 +1098,408 @@ const recalculateLearningOutcomeMapping = async (req, res) => {
     }
 };
 
+// Helper function to extract tags from text
+const extractTagsForConceptGraph = (text) => {
+    if (!text) return [];
+    const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+    const tags = [];
+    lines.forEach(line => {
+        const commaTags = line.split(',').map(t => t.trim()).filter(Boolean);
+        tags.push(...commaTags);
+    });
+    return tags;
+};
+
+// Generate and save concept graph for a single topic
+const calculateAndSaveConceptGraph = async (topicName, type, subjectId = null, subjectName = 'Mathematics') => {
+    try {
+        console.log(`[Concept Graph] Calculating for topic: ${topicName}, type: ${type}`);
+
+        // Get all learning outcomes for this topic
+        const query = { 
+            topicName: topicName,
+            type: type
+        };
+
+        if (type === 'SUBJECT' && subjectId) {
+            query.subjectId = subjectId;
+        }
+
+        const topicOutcomes = await LearningOutcome.find(query)
+            .populate({
+                path: 'classId',
+                select: 'name level',
+                match: { level: { $ne: null } }
+            })
+            .populate('subjectId', 'name')
+            .sort({ 'classId.level': 1 })
+            .lean();
+
+        // Filter valid outcomes
+        const validOutcomes = topicOutcomes.filter(o => o && o.classId && o.classId.level);
+
+        if (validOutcomes.length === 0) {
+            // Save empty graph
+            await ConceptGraph.findOneAndUpdate(
+                { topic: topicName, type, subjectId: subjectId || null },
+                {
+                    subject: subjectName,
+                    topic: topicName,
+                    type,
+                    subjectId: subjectId || null,
+                    conceptGraphs: [],
+                    totalNodes: 0,
+                    totalEdges: 0,
+                    totalConcepts: 0,
+                    lastCalculatedAt: new Date()
+                },
+                { upsert: true, new: true }
+            );
+            return { conceptGraphs: [] };
+        }
+
+        // Extract tags and group by class
+        const classes = [];
+        validOutcomes.forEach(outcome => {
+            const tags = extractTagsForConceptGraph(outcome.text);
+            
+            // Find or create class entry
+            let classEntry = classes.find(c => c.class === outcome.classId.level);
+            if (!classEntry) {
+                classEntry = {
+                    class: outcome.classId.level,
+                    subject: outcome.subjectId?.name || subjectName,
+                    topic: outcome.topicName || topicName,
+                    tags: []
+                };
+                classes.push(classEntry);
+            }
+
+            // Add tags to class entry
+            classEntry.tags.push(...tags);
+        });
+
+        // Sort classes by level
+        classes.sort((a, b) => a.class - b.class);
+
+        // Remove duplicate tags within each class
+        classes.forEach(classEntry => {
+            classEntry.tags = [...new Set(classEntry.tags)];
+        });
+
+        if (classes.length === 0) {
+            throw new Error('No valid classes found for topic');
+        }
+
+        // Generate graph using DeepSeek AI
+        const prompt = `
+Generate a single JSON output for a concept-wise vertical learning graph.
+
+CRITICAL RULES:
+1. Use all tags from all classes provided.
+2. Group tags under concepts automatically (e.g., Place Value, Addition and Subtraction, Multiplication and Division, Fractions, Decimals, Number Properties, Money and Measurement, etc.)
+3. Each concept has nodes per class with id, class, tag.
+4. EDGE REQUIREMENTS (VERY IMPORTANT):
+   - Create edges connecting nodes from lower class → higher class per concept (showing progression).
+   - Ensure ALL nodes in higher classes are properly connected from previous class nodes.
+   - Maintain class continuity: ensure edges flow from lower to higher classes without skipping.
+   - Each higher class node should have at least one edge from a lower class node in the same concept.
+   - Do NOT skip classes in the progression chain.
+5. FORMATTING:
+   - Use consistent formatting: replace hyphens with commas where appropriate (e.g., "2, 3, 4, 5" not "2- 3- 4- 5")
+   - Keep tag text clean and readable.
+6. CONCEPT PURITY:
+   - Keep concepts logically separated (e.g., Addition and Subtraction together, Multiplication and Division together).
+   - Do not mix unrelated operations within the same concept.
+
+Return ONLY valid JSON in this format:
+
+{
+  "subject": "<subject>",
+  "topic": "<topic>",
+  "graphType": "concept_wise_vertical_learning_graph",
+  "conceptGraphs": [
+    {
+      "concept": "<concept name>",
+      "nodes": [
+        { "id": "unique_id", "class": <class number>, "tag": "<tag text>" }
+      ],
+      "edges": [
+        { "from": "node_id", "to": "node_id" }
+      ]
+    }
+  ]
+}
+
+DATA:
+${JSON.stringify(classes, null, 2)}
+
+Return ONLY valid JSON, no additional text or explanations.
+`;
+
+        const response = await axios.post(
+            "https://api.deepseek.com/chat/completions",
+            {
+                model: "deepseek-chat",
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are an educational AI that generates concept-wise vertical learning graphs. 
+
+CRITICAL REQUIREMENTS:
+1. ALL nodes in higher classes MUST be connected from previous class nodes in the same concept.
+2. Maintain class continuity: ensure edges flow from lower to higher classes without skipping.
+3. Format tags consistently: use commas instead of hyphens (e.g., "2, 3, 4, 5" not "2- 3- 4- 5").
+4. Keep concepts logically separated and pure.
+5. Always return valid JSON only, no additional text or explanations.`
+                    },
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                temperature: 0.1,
+                max_tokens: 8000
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                timeout: 180000
+            }
+        );
+
+        const aiText = response.data.choices[0].message.content.trim();
+        
+        // Try to extract JSON from the response
+        let jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error('No JSON found in AI response');
+        }
+
+        const graphData = JSON.parse(jsonMatch[0]);
+
+        // Calculate totals
+        let totalNodes = 0;
+        let totalEdges = 0;
+        const totalConcepts = graphData.conceptGraphs?.length || 0;
+
+        graphData.conceptGraphs?.forEach(conceptGraph => {
+            totalNodes += conceptGraph.nodes?.length || 0;
+            totalEdges += conceptGraph.edges?.length || 0;
+        });
+
+        // Save to database
+        const savedGraph = await ConceptGraph.findOneAndUpdate(
+            { topic: topicName, type, subjectId: subjectId || null },
+            {
+                subject: graphData.subject || subjectName,
+                topic: graphData.topic || topicName,
+                type,
+                subjectId: subjectId || null,
+                graphType: graphData.graphType || 'concept_wise_vertical_learning_graph',
+                conceptGraphs: graphData.conceptGraphs || [],
+                totalNodes,
+                totalEdges,
+                totalConcepts,
+                lastCalculatedAt: new Date()
+            },
+            { upsert: true, new: true }
+        );
+
+        console.log(`[Concept Graph] Saved for topic: ${topicName} (${totalConcepts} concepts, ${totalNodes} nodes, ${totalEdges} edges)`);
+
+        return savedGraph;
+
+    } catch (error) {
+        console.error(`[Concept Graph] Error calculating for topic ${topicName}:`, error.message);
+        throw error;
+    }
+};
+
+// Get concept graph for a topic from database
+const getConceptGraph = async (req, res) => {
+    try {
+        const { topicName } = req.params;
+        const { type, subjectId } = req.query;
+
+        if (!topicName) {
+            return res.status(400).json({ message: 'topicName is required' });
+        }
+
+        if (!type) {
+            return res.status(400).json({ message: 'type is required' });
+        }
+
+        const query = { topic: topicName, type };
+        if (type === 'SUBJECT' && subjectId) {
+            query.subjectId = subjectId;
+        } else if (type === 'SUBJECT') {
+            query.subjectId = subjectId || null;
+        }
+
+        const conceptGraph = await ConceptGraph.findOne(query).lean();
+
+        if (!conceptGraph) {
+            return res.status(404).json({ 
+                message: `Concept graph not found for topic: ${topicName}. Please sync first.` 
+            });
+        }
+
+        res.json({
+            success: true,
+            conceptGraph: {
+                subject: conceptGraph.subject,
+                topic: conceptGraph.topic,
+                type: conceptGraph.type,
+                graphType: conceptGraph.graphType,
+                conceptGraphs: conceptGraph.conceptGraphs,
+                totalNodes: conceptGraph.totalNodes,
+                totalEdges: conceptGraph.totalEdges,
+                totalConcepts: conceptGraph.totalConcepts,
+                lastCalculatedAt: conceptGraph.lastCalculatedAt
+            }
+        });
+
+    } catch (err) {
+        console.error('Error in getConceptGraph:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
+// Get topic list (from learning outcomes)
+const getTopicList = async (req, res) => {
+    try {
+        const { type, subjectId } = req.query;
+
+        if (!type) {
+            return res.status(400).json({ message: 'type is required' });
+        }
+
+        const query = { type };
+        if (type === 'SUBJECT' && subjectId) {
+            query.subjectId = subjectId;
+        }
+
+        // Get distinct topics from learning outcomes
+        const topics = await LearningOutcome.distinct('topicName', query);
+
+        // Get concept graph status for each topic
+        const topicsWithStatus = await Promise.all(
+            topics.map(async (topicName) => {
+                const graphQuery = { topic: topicName, type };
+                if (type === 'SUBJECT' && subjectId) {
+                    graphQuery.subjectId = subjectId;
+                } else if (type === 'SUBJECT') {
+                    graphQuery.subjectId = subjectId || null;
+                }
+
+                const conceptGraph = await ConceptGraph.findOne(graphQuery).lean();
+                
+                return {
+                    topicName,
+                    hasConceptGraph: !!conceptGraph,
+                    lastCalculatedAt: conceptGraph?.lastCalculatedAt || null,
+                    totalConcepts: conceptGraph?.totalConcepts || 0,
+                    totalNodes: conceptGraph?.totalNodes || 0,
+                    totalEdges: conceptGraph?.totalEdges || 0
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            totalTopics: topicsWithStatus.length,
+            topics: topicsWithStatus.sort((a, b) => a.topicName.localeCompare(b.topicName))
+        });
+
+    } catch (err) {
+        console.error('Error in getTopicList:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
+// Sync all concept graphs (background process)
+const syncAllConceptGraphs = async (req, res) => {
+    try {
+        const { type, subjectId } = req.query;
+
+        if (!type) {
+            return res.status(400).json({ message: 'type is required' });
+        }
+
+        // Start background process
+        res.json({
+            success: true,
+            message: 'Concept graph sync started in background. This may take several minutes.',
+            status: 'processing'
+        });
+
+        // Run in background
+        (async () => {
+            try {
+                const query = { type };
+                if (type === 'SUBJECT' && subjectId) {
+                    query.subjectId = subjectId;
+                }
+
+                // Get all distinct topics
+                const topics = await LearningOutcome.distinct('topicName', query);
+                
+                console.log(`[Concept Graph Sync] Starting sync for ${topics.length} topics...`);
+
+                let successCount = 0;
+                let errorCount = 0;
+                const errors = [];
+
+                for (const topicName of topics) {
+                    try {
+                        // Get subject name from first learning outcome
+                        const sampleOutcome = await LearningOutcome.findOne({ 
+                            topicName, 
+                            type,
+                            ...(type === 'SUBJECT' && subjectId ? { subjectId } : {})
+                        }).populate('subjectId', 'name').lean();
+
+                        const subjectName = sampleOutcome?.subjectId?.name || 'Mathematics';
+                        const outcomeSubjectId = sampleOutcome?.subjectId?._id || subjectId;
+
+                        await calculateAndSaveConceptGraph(topicName, type, outcomeSubjectId, subjectName);
+                        successCount++;
+                        console.log(`[Concept Graph Sync] ✓ ${topicName} (${successCount}/${topics.length})`);
+                    } catch (error) {
+                        errorCount++;
+                        errors.push({ topic: topicName, error: error.message });
+                        console.error(`[Concept Graph Sync] ✗ ${topicName}: ${error.message}`);
+                    }
+                }
+
+                console.log(`[Concept Graph Sync] Complete! Success: ${successCount}, Errors: ${errorCount}`);
+                if (errors.length > 0) {
+                    console.error('[Concept Graph Sync] Errors:', errors);
+                }
+
+            } catch (error) {
+                console.error('[Concept Graph Sync] Fatal error:', error);
+            }
+        })();
+
+    } catch (err) {
+        console.error('Error in syncAllConceptGraphs:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
+};
+
 module.exports = {
     mapLearningOutcomesToCurriculum,
     getLearningOutcomeCurriculumMapping,
@@ -1029,5 +1507,10 @@ module.exports = {
     calculateAndSaveCurriculumMapping, // Export for use in other controllers
     calculateAndSaveLearningOutcomeMapping, // Export for learning outcome to learning outcome mapping
     recalculateLearningOutcomeMapping,
-    getTopicTagMappings
+    getTopicTagMappings,
+    calculateAndSaveTopicTagMappings, // Export for background calculation
+    calculateAndSaveConceptGraph, // Export for concept graph calculation
+    getConceptGraph,
+    getTopicList,
+    syncAllConceptGraphs
 };

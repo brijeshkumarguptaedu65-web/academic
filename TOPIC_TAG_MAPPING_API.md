@@ -284,13 +284,14 @@ GET /api/admin/curriculum/topics/:topicName/tag-mappings
 ```
 
 ### Description
-Returns tag-wise mappings for a specific topic using DeepSeek AI API. Only returns mappings with relevance score >= 60% (0.6). 
+Returns tag-wise mappings for a specific topic **from the database**. Mappings are calculated in the background when learning outcomes are added/updated/deleted, not on-the-fly.
 
 **Key Features:**
+- **Reads from database** - Fast response, no AI API calls during request
 - Splits learning outcome text into individual tags (by comma and newline)
 - Maps tags from lower classes to higher classes only (progression chain: Class 2 → Class 3 → Class 4 → Class 6, etc.)
 - Groups mappings by tag to show progression chains
-- Uses DeepSeek API to analyze semantic relationships between individual tags
+- Mappings are automatically recalculated in background when learning outcomes change
 
 ### Authentication
 - **Required**: Yes
@@ -550,14 +551,19 @@ GET /api/admin/curriculum/topics/Algebraic%20Expressions%2C%20Identities%20and%2
 
 ### Notes
 
-1. **Relevance Score Threshold**: Only mappings with `relevanceScore >= 0.6` (60%) are returned
-2. **Tag Extraction**: Tags are extracted by splitting on both commas (`,`) and newlines (`\n`), preserving LaTeX/KaTeX expressions
-3. **Progression Chain**: Only maps from lower classes to higher classes (e.g., Class 2 → Class 3 → Class 4 → Class 6)
-4. **Individual Tag Mapping**: Each tag is mapped individually, not the entire learning outcome text
-5. **AI Processing**: Uses DeepSeek AI API to analyze semantic relationships between individual tags
-6. **Tag Chains**: Response includes both flat `tagMappings` array and grouped `tagChains` showing progression paths
-7. **Sorting**: Mappings are sorted by class level (ascending) then by relevance score (descending)
-8. **Performance**: This endpoint may take longer to respond as it makes multiple AI API calls (one per tag pair)
+1. **Database Storage**: Mappings are stored in the database and retrieved instantly (no AI API calls during request)
+2. **Background Calculation**: Mappings are automatically calculated in the background when:
+   - A learning outcome is **created**
+   - A learning outcome is **updated** (text or topicName changed)
+   - A learning outcome is **deleted**
+3. **Relevance Score Threshold**: Only mappings with `relevanceScore >= 0.6` (60%) are stored
+4. **Tag Extraction**: Tags are extracted by splitting on both commas (`,`) and newlines (`\n`), preserving LaTeX/KaTeX expressions
+5. **Progression Chain**: Only maps from lower classes to higher classes (e.g., Class 2 → Class 3 → Class 4 → Class 6)
+6. **Individual Tag Mapping**: Each tag is mapped individually, not the entire learning outcome text
+7. **Tag Chains**: Response includes both flat `tagMappings` array and grouped `tagChains` showing progression paths
+8. **Sorting**: Mappings are sorted by class level (ascending) then by relevance score (descending)
+9. **Performance**: This endpoint responds quickly as it reads from database (no AI processing during request)
+10. **Initial Calculation**: If mappings don't exist, run `npm run calculate:topic-mappings` to calculate for all topics
 
 ### Error Responses
 
