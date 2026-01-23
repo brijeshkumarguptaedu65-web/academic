@@ -490,8 +490,6 @@ Return a JSON object:
 
 IMPORTANT: Only return if relevancyScore > 0.6. Return ONLY valid JSON, no additional text.`;
 
-Return ONLY valid JSON, no additional text.`;
-
         const aiResponse = await axios.post("https://api.deepseek.com/chat/completions", {
             model: "deepseek-chat",
             messages: [
