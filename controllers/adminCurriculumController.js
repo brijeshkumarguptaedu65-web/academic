@@ -1371,7 +1371,7 @@ const getConceptGraph = async (req, res) => {
     }
 };
 
-// Get topic list (from learning outcomes)
+// Get topic list (from learning outcomes - only topics with learning outcomes)
 const getTopicList = async (req, res) => {
     try {
         const { type, subjectId } = req.query;
@@ -1385,8 +1385,42 @@ const getTopicList = async (req, res) => {
             query.subjectId = subjectId;
         }
 
-        // Get distinct topics from learning outcomes
-        const topics = await LearningOutcome.distinct('topicName', query);
+        // Get all learning outcomes to extract topics (including null/undefined topicName)
+        const outcomes = await LearningOutcome.find(query)
+            .populate({
+                path: 'classId',
+                select: 'name level',
+                match: { level: { $ne: null } }
+            })
+            .select('topicName')
+            .lean();
+
+        // Filter valid outcomes (with valid classId) and extract unique topics
+        // Use same logic as getLearningOutcomesByTopic: null/undefined topicName becomes 'No Topic'
+        const validOutcomes = outcomes.filter(o => {
+            try {
+                if (!o || !o.classId || !o.classId.level) {
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                return false;
+            }
+        });
+
+        // Extract unique topics (normalize null/undefined to 'No Topic')
+        // Count learning outcomes per topic to ensure we only show topics with outcomes
+        const topicMap = new Map();
+        validOutcomes.forEach(outcome => {
+            const topic = outcome.topicName || 'No Topic';
+            if (!topicMap.has(topic)) {
+                topicMap.set(topic, 0);
+            }
+            topicMap.set(topic, topicMap.get(topic) + 1);
+        });
+
+        // Only include topics that have at least one learning outcome
+        const topics = Array.from(topicMap.keys()).filter(topic => topicMap.get(topic) > 0);
 
         // Get concept graph status for each topic
         const topicsWithStatus = await Promise.all(
@@ -1406,15 +1440,23 @@ const getTopicList = async (req, res) => {
                     lastCalculatedAt: conceptGraph?.lastCalculatedAt || null,
                     totalConcepts: conceptGraph?.totalConcepts || 0,
                     totalNodes: conceptGraph?.totalNodes || 0,
-                    totalEdges: conceptGraph?.totalEdges || 0
+                    totalEdges: conceptGraph?.totalEdges || 0,
+                    learningOutcomeCount: topicMap.get(topicName) || 0
                 };
             })
         );
 
+        // Sort topics (put 'No Topic' at the end, same as getLearningOutcomesByTopic)
+        const sortedTopics = topicsWithStatus.sort((a, b) => {
+            if (a.topicName === 'No Topic') return 1;
+            if (b.topicName === 'No Topic') return -1;
+            return a.topicName.localeCompare(b.topicName);
+        });
+
         res.json({
             success: true,
-            totalTopics: topicsWithStatus.length,
-            topics: topicsWithStatus.sort((a, b) => a.topicName.localeCompare(b.topicName))
+            totalTopics: sortedTopics.length,
+            topics: sortedTopics
         });
 
     } catch (err) {
