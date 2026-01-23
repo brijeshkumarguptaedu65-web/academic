@@ -5,7 +5,8 @@ const { protect, admin } = require('../middleware/authMiddleware');
 const {
     getDashboardStats,
     getStudents,
-    getStudentPerformance
+    getStudentPerformance,
+    getUserQuizHistory
 } = require('../controllers/analyticsController');
 
 const {
@@ -19,6 +20,7 @@ const {
 router.get('/admin/stats/dashboard', protect, admin, getDashboardStats);
 router.get('/admin/students', protect, admin, getStudents);
 router.get('/admin/students/:id/performance', protect, admin, getStudentPerformance);
+router.get('/admin/students/:id/quiz-history', protect, admin, getUserQuizHistory);
 router.get('/admin/revenue', protect, admin, getRevenue);
 
 // Plans & Subscription
