@@ -373,12 +373,61 @@ const recalculateCurriculumMapping = async (req, res) => {
 };
 
 // Helper function to extract tags from comma-separated text
+// Handles LaTeX/KaTeX equations, fractions, polynomials, etc.
 const extractTags = (text) => {
     if (!text) return [];
-    return text
-        .split(',')
-        .map(t => t.trim())
-        .filter(Boolean);
+    // Split by comma, but preserve LaTeX/KaTeX expressions
+    // LaTeX expressions might contain commas, so we need to be careful
+    const tags = [];
+    let currentTag = '';
+    let inLatex = false;
+    let braceCount = 0;
+    
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        
+        // Check for LaTeX delimiters: \(, \), \[, \], $, $$
+        if (char === '\\' && (text[i + 1] === '(' || text[i + 1] === '[' || text[i + 1] === '{')) {
+            inLatex = true;
+            currentTag += char;
+            continue;
+        }
+        
+        if (char === '$' || (char === '\\' && (text[i + 1] === ')' || text[i + 1] === ']'))) {
+            inLatex = !inLatex;
+            currentTag += char;
+            continue;
+        }
+        
+        // Track braces for LaTeX expressions
+        if (char === '{') braceCount++;
+        if (char === '}') braceCount--;
+        
+        // If we're in LaTeX or inside braces, add to current tag
+        if (inLatex || braceCount > 0 || char !== ',') {
+            currentTag += char;
+        } else {
+            // Comma found and not in LaTeX - split here
+            if (currentTag.trim()) {
+                tags.push(currentTag.trim());
+            }
+            currentTag = '';
+            inLatex = false;
+            braceCount = 0;
+        }
+    }
+    
+    // Add the last tag
+    if (currentTag.trim()) {
+        tags.push(currentTag.trim());
+    }
+    
+    // Fallback to simple split if no LaTeX detected
+    if (tags.length === 0) {
+        return text.split(',').map(t => t.trim()).filter(Boolean);
+    }
+    
+    return tags.filter(Boolean);
 };
 
 // Helper function to normalize tags for better AI matching
@@ -399,20 +448,38 @@ const getTagRelevancy = async (tagA, tagB, classLevelA, classLevelB) => {
 Tag A (Class ${classLevelA}): "${tagA}"
 Tag B (Class ${classLevelB}): "${tagB}"
 
+IMPORTANT: Tags may contain LaTeX/KaTeX mathematical expressions including:
+- Equations: $x + y = z$, \\(a = b\\), \\[x^2 + y^2 = r^2\\]
+- Fractions: $\\frac{a}{b}$, $\\frac{x+1}{x-1}$, $\\frac{1}{2} + \\frac{1}{3}$
+- Polynomials: $ax^2 + bx + c = 0$, $x^3 + 2x^2 - 5x + 1$, $x^4 - 3x^2 + 2 = 0$
+- All LaTeX syntax: subscripts ($x_1$, $a_{ij}$), superscripts ($x^2$, $e^{-x}$), integrals ($\\int f(x)dx$), summations ($\\sum_{i=1}^{n}$), matrices, etc.
+- Mathematical symbols: +, -, ×, ÷, =, <, >, ≤, ≥, ≠, ±, ∞, ∑, ∫, √, π, α, β, θ, etc.
+
 Analyze the semantic relationship between these tags. Consider:
-1. Are they the same concept at different levels? (e.g., "Table 1 to 5" → "Table 1 to 10" is a clear progression)
-2. Is one a prerequisite for the other?
-3. Is one a progression/advancement of the other?
+1. Are they the same mathematical concept at different levels? (e.g., "simple fractions" → "complex fractions")
+2. Is one a prerequisite for the other? (e.g., "basic equations" → "quadratic equations")
+3. Is one a progression/advancement of the other? (e.g., "linear equations" → "polynomial equations")
 4. Do they involve similar skills but different complexity?
 5. Look for numeric progressions (1-5 → 1-10, single-digit → two-digit, etc.)
 6. Look for skill progressions (basic → advanced, simple → complex)
+7. For LaTeX expressions: Compare the mathematical concepts, not just the syntax
+   - $\\frac{1}{2}$ and $\\frac{1}{4}$ are related (fractions)
+   - $x + 1 = 5$ and $2x + 3 = 7$ are related (linear equations)
+   - $x^2 + 1 = 0$ and $x^3 + 2x = 0$ are related (polynomial equations)
+   - Simple fractions → Complex fractions = PROGRESSION
+   - Linear equations → Quadratic equations = PROGRESSION
+   - Basic polynomials → Advanced polynomials = PROGRESSION
 
 IMPORTANT: 
-- "Table 1 to 5" should map to "Table 1 to 10" as PROGRESSION (higher score)
-- "adding single-digit" should map to "adding two-digit" as PROGRESSION
-- Similar concepts with increasing difficulty = PROGRESSION
-- Complementary skills = RELATED
-- Unrelated = NONE
+- "Table 1 to 5" should map to "Table 1 to 10" as PROGRESSION (score > 0.6)
+- "adding single-digit" should map to "adding two-digit" as PROGRESSION (score > 0.6)
+- "simple fractions $\\frac{a}{b}$" should map to "complex fractions $\\frac{x+1}{x-1}$" as PROGRESSION
+- "linear equations $ax + b = 0$" should map to "quadratic equations $ax^2 + bx + c = 0$" as PROGRESSION
+- Mathematical operations with same concept but different complexity = PROGRESSION
+- Similar concepts with increasing difficulty = PROGRESSION (score > 0.6)
+- Complementary skills = RELATED (score > 0.6)
+- Only return if relevancyScore > 0.6
+- Unrelated = NONE (don't return)
 
 Return a JSON object:
 {
@@ -420,6 +487,8 @@ Return a JSON object:
   "relation": "same|progression|prerequisite|related|unrelated",
   "reason": "brief explanation"
 }
+
+IMPORTANT: Only return if relevancyScore > 0.6. Return ONLY valid JSON, no additional text.`;
 
 Return ONLY valid JSON, no additional text.`;
 
@@ -523,12 +592,43 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
         }
 
         // Tag-wise mapping: Compare each tag from current LO with tags from other LOs
+        // Group by topic first, then map tag-wise within topics
         const tagMappings = [];
+        
+        // Check for null classId
+        if (!learningOutcome.classId || !learningOutcome.classId.level) {
+            console.error(`Learning outcome ${learningOutcomeId} has null classId`);
+            await LearningOutcomeMapping.findOneAndUpdate(
+                { learningOutcomeId },
+                {
+                    learningOutcomeId,
+                    mappedLearningOutcomes: [],
+                    lastCalculatedAt: new Date()
+                },
+                { upsert: true, new: true }
+            );
+            return { mappedLearningOutcomes: [] };
+        }
+        
         const currentClassLevel = learningOutcome.classId.level;
+        const currentTopicName = learningOutcome.topicName || '';
 
         for (const otherLO of allLearningOutcomes) {
+            // Skip if classId is null
+            if (!otherLO.classId || !otherLO.classId.level) {
+                console.warn(`Skipping learning outcome ${otherLO._id} - null classId`);
+                continue;
+            }
+            
             const otherTags = extractTags(otherLO.text);
             const otherClassLevel = otherLO.classId.level;
+            const otherTopicName = otherLO.topicName || '';
+            
+            // Group by topic: Only map if topics match (same topic name)
+            // This ensures we map within the same topic across classes
+            if (currentTopicName && otherTopicName && currentTopicName !== otherTopicName) {
+                continue; // Skip if topics don't match
+            }
 
             // Compare each current tag with each other tag
             for (const currentTag of currentTags) {
@@ -541,11 +641,13 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
                         otherClassLevel
                     );
 
-                    // Include mappings with relevancy >= 0.3 (lowered threshold for better coverage)
-                    // Also include if relation is "same" or "progression" even with lower scores
-                    const shouldInclude = relevancy.relevancyScore >= 0.3 || 
-                                         relevancy.relation === 'same' || 
-                                         relevancy.relation === 'progression';
+                    // Only include mappings with relevancy score > 0.6 (60%)
+                    // Include PROGRESSION, RELATED, PREREQUISITE, and SAME relations
+                    const shouldInclude = relevancy.relevancyScore > 0.6 && 
+                                         (relevancy.relation === 'progression' || 
+                                          relevancy.relation === 'related' || 
+                                          relevancy.relation === 'prerequisite' || 
+                                          relevancy.relation === 'same');
                     
                     if (shouldInclude) {
                         // Determine mapping type based on class level and relation
@@ -567,12 +669,13 @@ const calculateAndSaveLearningOutcomeMapping = async (learningOutcomeId) => {
                                 mappingType = 'RELATED';
                             }
                         } else {
-                            // Same class level
-                            if (relevancy.relation === 'same') {
-                                mappingType = 'RELATED';
-                            } else {
-                                mappingType = 'RELATED';
-                            }
+                            // Same class level - mark as RELATED
+                            mappingType = 'RELATED';
+                        }
+                        
+                        // Ensure RELATED is included if relevancy is high enough
+                        if (relevancy.relation === 'related' && relevancy.relevancyScore > 0.6) {
+                            mappingType = 'RELATED';
                         }
 
                         // Check if we already have a mapping for this learning outcome

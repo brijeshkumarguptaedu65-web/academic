@@ -71,10 +71,14 @@ const getLearningOutcomes = async (req, res) => {
         const outcomes = await LearningOutcome.find(query)
             .populate('classId', 'name level')
             .populate('subjectId', 'name')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean(); // Use lean() to get plain objects
+        
+        // Filter out outcomes with null classId
+        const validOutcomes = outcomes.filter(o => o.classId && o.classId.level);
 
         // Get all learning outcome IDs for mapping lookup
-        const outcomeIds = outcomes.map(o => o._id);
+        const outcomeIds = validOutcomes.map(o => o._id);
         const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
         const mappings = await LearningOutcomeMapping.find({
             learningOutcomeId: { $in: outcomeIds }
@@ -82,7 +86,7 @@ const getLearningOutcomes = async (req, res) => {
 
         // Add remedials and mappings to each outcome
         const outcomesWithRemedials = await Promise.all(
-            outcomes.map(async (outcome) => {
+            validOutcomes.map(async (outcome) => {
                 const obj = outcome.toObject();
                 obj.id = obj._id;
                 obj.contents = obj.contents || [];
@@ -111,24 +115,31 @@ const getLearningOutcomes = async (req, res) => {
                         const mappedOutcome = mappedOutcomes.find(
                             o => o._id.toString() === mo.mappedLearningOutcomeId.toString()
                         );
+                        
+                        // Check for null classId
+                        if (!mappedOutcome || !mappedOutcome.classId || !mappedOutcome.classId.level) {
+                            console.warn(`Skipping mapping - null classId for outcome ${mo.mappedLearningOutcomeId}`);
+                            return null;
+                        }
+                        
                         return {
                             learningOutcomeId: mo.mappedLearningOutcomeId.toString(),
-                            learningOutcome: mappedOutcome ? {
+                            learningOutcome: {
                                 id: mappedOutcome._id.toString(),
                                 text: mappedOutcome.text,
                                 tags: mappedOutcome.text.split(',').map(t => t.trim()),
                                 classLevel: mappedOutcome.classId.level,
-                                className: mappedOutcome.classId.name,
+                                className: mappedOutcome.classId.name || `Class ${mappedOutcome.classId.level}`,
                                 topicName: mappedOutcome.topicName,
                                 type: mappedOutcome.type
-                            } : null,
+                            },
                             mappingType: mo.mappingType,
                             relevanceScore: mo.relevanceScore,
                             reason: mo.reason,
                             fromTag: mo.fromTag || null, // Tag from current learning outcome
                             toTag: mo.toTag || null // Tag from mapped learning outcome
                         };
-                    });
+                    }).filter(m => m !== null); // Remove null entries
                 } else {
                     obj.mappedLearningOutcomes = [];
                 }
