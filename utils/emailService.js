@@ -85,11 +85,11 @@ The Academic Audit Team`;
     let lastError = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const info = await transporter.sendMail(mailOptions);
+    try {
+        const info = await transporter.sendMail(mailOptions);
             console.log(`Email sent successfully (attempt ${attempt}):`, info.messageId);
-            return { success: true, messageId: info.messageId };
-        } catch (error) {
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
             lastError = error;
             console.error(`Email send attempt ${attempt} failed:`, error.message);
             

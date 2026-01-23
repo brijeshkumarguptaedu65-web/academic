@@ -355,6 +355,8 @@ const resetPassword = async (req, res) => {
 
 const { Class } = require('../models/Metadata');
 const LearningOutcome = require('../models/LearningOutcome');
+const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
+const ConceptGraph = require('../models/ConceptGraph');
 
 /**
  * @desc    Get list of all classes
@@ -377,6 +379,23 @@ const getClassList = async (req, res) => {
         console.error('Get classes error:', error);
         res.status(500).json({ message: 'Server error fetching classes', error: error.message });
     }
+};
+
+// Helper function to extract tags from text (split by newline and comma)
+const extractTags = (text) => {
+    if (!text) return [];
+    
+    // First, split by newlines (\n) - many learning outcomes use newlines to separate tags
+    const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+    
+    // Then split each line by comma
+    const tags = [];
+    lines.forEach(line => {
+        const commaTags = line.split(',').map(t => t.trim()).filter(Boolean);
+        tags.push(...commaTags);
+    });
+    
+    return tags;
 };
 
 /**
@@ -412,6 +431,96 @@ const getBasicCalculationLearningOutcomes = async (req, res) => {
             type: 'BASIC_CALCULATION',
         }).populate('classId', 'name level');
 
+        // Get unique topics from learning outcomes
+        const topics = [...new Set(learningOutcomes.map(lo => lo.topicName).filter(Boolean))];
+
+        // Fetch concept graphs for all topics
+        const conceptGraphs = await ConceptGraph.find({
+            topic: { $in: topics },
+            type: 'BASIC_CALCULATION',
+            subjectId: null
+        });
+
+        // Create a map: topic -> concept graph
+        const conceptGraphMap = new Map();
+        conceptGraphs.forEach(cg => {
+            conceptGraphMap.set(cg.topic, cg);
+        });
+
+        // Create a map: tag -> concept name (for each topic)
+        // Use normalized tag for matching (lowercase, trimmed)
+        const tagConceptMap = new Map(); // key: "topic|normalizedTag", value: concept name
+        
+        conceptGraphs.forEach(cg => {
+            cg.conceptGraphs.forEach(conceptGraph => {
+                const conceptName = conceptGraph.concept;
+                conceptGraph.nodes.forEach(node => {
+                    const normalizedTag = node.tag.toLowerCase().trim();
+                    const key = `${cg.topic}|${normalizedTag}`;
+                    tagConceptMap.set(key, conceptName);
+                });
+            });
+        });
+
+        // Transform learning outcomes with tags and concepts
+        const learningOutcomesWithTagsAndConcepts = learningOutcomes.map(lo => {
+            // Extract tags from text
+            const tags = extractTags(lo.text);
+            
+            // Map each tag to its concept (try exact match first, then normalized match)
+            const tagsWithConcepts = tags.map(tag => {
+                // Try exact match first
+                let key = `${lo.topicName}|${tag}`;
+                let concept = tagConceptMap.get(key);
+                
+                // If no exact match, try normalized match
+                if (!concept) {
+                    const normalizedTag = tag.toLowerCase().trim();
+                    key = `${lo.topicName}|${normalizedTag}`;
+                    concept = tagConceptMap.get(key);
+                }
+                
+                // If still no match, try partial match (check if tag contains or is contained in any concept graph tag)
+                if (!concept && lo.topicName) {
+                    const cg = conceptGraphMap.get(lo.topicName);
+                    if (cg) {
+                        for (const conceptGraph of cg.conceptGraphs) {
+                            for (const node of conceptGraph.nodes) {
+                                const nodeTag = node.tag.toLowerCase().trim();
+                                const currentTag = tag.toLowerCase().trim();
+                                // Check if tags are similar (one contains the other or vice versa)
+                                if (nodeTag.includes(currentTag) || currentTag.includes(nodeTag)) {
+                                    concept = conceptGraph.concept;
+                                    break;
+                                }
+                            }
+                            if (concept) break;
+                        }
+                    }
+                }
+                
+                return {
+                    tag: tag,
+                    concept: concept || null
+                };
+            });
+
+            // Get unique concepts for this learning outcome
+            const concepts = [...new Set(tagsWithConcepts.map(t => t.concept).filter(Boolean))];
+
+            return {
+                _id: lo._id,
+                text: lo.text,
+                type: lo.type,
+                topicName: lo.topicName,
+                instruction: lo.instruction,
+                contents: lo.contents,
+                classId: lo.classId,
+                tags: tagsWithConcepts, // Tags with their concept
+                concepts: concepts, // Unique concept names
+            };
+        });
+
         res.json({
             success: true,
             selectedClass: selectedClassLevel,
@@ -420,24 +529,14 @@ const getBasicCalculationLearningOutcomes = async (req, res) => {
                 name: previousClass.name,
                 _id: previousClass._id,
             },
-            count: learningOutcomes.length,
-            learningOutcomes: learningOutcomes.map(lo => ({
-                _id: lo._id,
-                text: lo.text,
-                type: lo.type,
-                topicName: lo.topicName,
-                instruction: lo.instruction,
-                contents: lo.contents,
-                classId: lo.classId,
-            })),
+            count: learningOutcomesWithTagsAndConcepts.length,
+            learningOutcomes: learningOutcomesWithTagsAndConcepts,
         });
     } catch (error) {
         console.error('Get basic calculation learning outcomes error:', error);
         res.status(500).json({ message: 'Server error fetching learning outcomes', error: error.message });
     }
 };
-
-const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
 
 /**
  * @desc    Get previous class concepts with tags (from learning outcome mappings)

@@ -304,7 +304,7 @@ Get list of all available classes.
 ### 8. Get Basic Calculation Learning Outcomes
 
 #### GET `/api/user/learning-outcomes/basic-calculation/:classLevel`
-Get BASIC_CALCULATION learning outcomes for the previous class (classLevel - 1).
+Get BASIC_CALCULATION learning outcomes for the previous class (classLevel - 1), including tags and concepts (mappings).
 
 **URL Parameters:**
 - `classLevel` (number) - The selected class level (must be 2 or higher)
@@ -321,11 +321,11 @@ Get BASIC_CALCULATION learning outcomes for the previous class (classLevel - 1).
     "name": "Class 4",
     "_id": "507f1f77bcf86cd799439014"
   },
-  "count": 15,
+  "count": 4,
   "learningOutcomes": [
     {
       "_id": "507f1f77bcf86cd799439020",
-      "text": "Adds two-digit numbers with regrouping",
+      "text": "Adds numbers beyond 1000 using place value understanding.\nAdds four- and five-digit numbers with and without regrouping.\nEstimates sums of large numbers and verifies the results using standard algorithms.",
       "type": "BASIC_CALCULATION",
       "topicName": "Addition",
       "instruction": "Practice addition with regrouping",
@@ -334,11 +334,36 @@ Get BASIC_CALCULATION learning outcomes for the previous class (classLevel - 1).
         "_id": "507f1f77bcf86cd799439014",
         "name": "Class 4",
         "level": 4
-      }
+      },
+      "tags": [
+        {
+          "tag": "Adds numbers beyond 1000 using place value understanding.",
+          "concept": "Place Value Addition"
+        },
+        {
+          "tag": "Adds four- and five-digit numbers with and without regrouping.",
+          "concept": "Multi-digit Addition"
+        },
+        {
+          "tag": "Estimates sums of large numbers and verifies the results using standard algorithms.",
+          "concept": "Estimation & Verification"
+        }
+      ],
+      "concepts": [
+        "Place Value Addition",
+        "Multi-digit Addition",
+        "Estimation & Verification"
+      ]
     }
   ]
 }
 ```
+
+**Response Fields:**
+- `tags` - Array of tag objects, each containing:
+  - `tag` - The individual tag text (extracted from the `text` field, split by newline and comma)
+  - `concept` - The concept name this tag belongs to (from ConceptGraph, or null if not mapped)
+- `concepts` - Array of unique concept names that the tags belong to
 
 **Error Responses:**
 - `400` - Invalid class level (must be 2 or higher)
