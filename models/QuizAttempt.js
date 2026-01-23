@@ -62,9 +62,9 @@ const quizAttemptSchema = new mongoose.Schema({
         question: { type: String, required: true },
         options: [{ type: String }],
         selectedAnswer: { type: Number, required: true }, // 0-based index
-        selectedOption: { type: String, required: true },
+        selectedOption: { type: String, default: '' }, // Derived from selectedAnswer and options if not provided
         correctAnswer: { type: Number, required: true }, // 0-based index
-        correctOption: { type: String, required: true },
+        correctOption: { type: String, default: '' }, // Derived from correctAnswer and options if not provided
         isCorrect: { type: Boolean, required: true },
         topicName: { type: String },
         concept: { type: String },

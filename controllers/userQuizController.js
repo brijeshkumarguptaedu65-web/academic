@@ -39,6 +39,37 @@ const submitQuiz = async (req, res) => {
             });
         }
 
+        // Process questions array - ensure selectedOption is set
+        const processedQuestions = (questions || []).map(q => {
+            const question = { ...q };
+            
+            // Derive selectedOption from selectedAnswer and options if not provided
+            if (!question.selectedOption && question.selectedAnswer !== undefined && question.options && Array.isArray(question.options)) {
+                const selectedIndex = question.selectedAnswer;
+                if (selectedIndex >= 0 && selectedIndex < question.options.length) {
+                    question.selectedOption = question.options[selectedIndex];
+                } else {
+                    question.selectedOption = ''; // Default to empty string if index is invalid
+                }
+            }
+            
+            // Derive correctOption from correctAnswer and options if not provided
+            if (!question.correctOption && question.correctAnswer !== undefined && question.options && Array.isArray(question.options)) {
+                const correctIndex = question.correctAnswer;
+                if (correctIndex >= 0 && correctIndex < question.options.length) {
+                    question.correctOption = question.options[correctIndex];
+                } else {
+                    question.correctOption = ''; // Default to empty string if index is invalid
+                }
+            }
+            
+            // Ensure selectedOption and correctOption are strings (required by schema)
+            if (!question.selectedOption) question.selectedOption = '';
+            if (!question.correctOption) question.correctOption = '';
+            
+            return question;
+        });
+
         // Create quiz attempt
         const quizAttempt = await QuizAttempt.create({
             userId,
@@ -59,7 +90,7 @@ const submitQuiz = async (req, res) => {
             },
             topicWise: topicWise || {},
             conceptWise: conceptWise || {},
-            questions: questions || [],
+            questions: processedQuestions,
             wrongConcepts: wrongConcepts || [],
             wrongTopics: wrongTopics || [],
             remedialRecommendations: remedialRecommendations || []

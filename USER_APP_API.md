@@ -12,6 +12,8 @@
 3. [Request/Response Examples](#requestresponse-examples)
 4. [Error Handling](#error-handling)
 5. [Testing Guide](#testing-guide)
+6. [Quiz Submission & Results](#7-quiz-submission--results)
+7. [Profile Management](#8-profile-management)
 
 ---
 
@@ -759,6 +761,533 @@ const resetResponse = await fetch('https://academic-7mkg.onrender.com/api/user/r
 
 ---
 
+## 7. Quiz Submission & Results
+
+### 7.1 Submit Quiz Results
+
+#### POST `/api/user/quiz/submit`
+Stores complete quiz attempt data including all question responses, topic-wise and concept-wise performance. Updates user profile if they pass.
+
+**Authentication:** Required (Bearer token)
+
+**Request Headers:**
+```
+Content-Type: application/json
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "classLevel": 3,
+  "quizType": "BASIC_CALCULATION",
+  "totalQuestions": 30,
+  "correctAnswers": 18,
+  "incorrectAnswers": 12,
+  "score": 18,
+  "percentage": 60.0,
+  "timeSpent": 3600,
+  "passed": true,
+  "overall": {
+    "score": 18,
+    "total": 30,
+    "correct": 18,
+    "percentage": 60.0
+  },
+  "topicWise": {
+    "Addition": {
+      "score": 5,
+      "total": 8,
+      "correct": 5,
+      "percentage": 62.5
+    },
+    "Subtraction": {
+      "score": 4,
+      "total": 7,
+      "correct": 4,
+      "percentage": 57.1
+    }
+  },
+  "conceptWise": {
+    "Whole Number Addition": {
+      "score": 3,
+      "total": 5,
+      "correct": 3,
+      "percentage": 60.0
+    }
+  },
+  "questions": [
+    {
+      "questionId": 1,
+      "question": "What is the sum of 234 and 567?",
+      "options": ["801", "791", "821", "831"],
+      "selectedAnswer": 1,
+      "selectedOption": "791",
+      "correctAnswer": 1,
+      "correctOption": "791",
+      "isCorrect": true,
+      "topicName": "Addition",
+      "concept": "Whole Number Addition",
+      "tag": "Adds two- and three-digit numbers with and without regrouping.",
+      "difficulty": "medium",
+      "timeSpent": 45,
+      "latex": false
+    }
+  ],
+  "wrongConcepts": [
+    {
+      "concept": "Estimation and Verification",
+      "wrongCount": 2,
+      "totalQuestions": 4,
+      "percentage": 50.0
+    }
+  ],
+  "wrongTopics": [
+    {
+      "topic": "Subtraction",
+      "wrongCount": 3,
+      "totalQuestions": 7,
+      "percentage": 57.1
+    }
+  ],
+  "remedialRecommendations": [
+    "Overall performance is below 60%. Focus on reviewing fundamental concepts.",
+    "Review Subtraction concepts - scored 57.1%"
+  ]
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Quiz results saved successfully",
+  "data": {
+    "attemptId": "507f1f77bcf86cd799439011",
+    "classLevel": 3,
+    "score": 18,
+    "percentage": 60.0,
+    "passed": true,
+    "profileUpdated": true,
+    "passedClassLevel": 3,
+    "totalQuestions": 30,
+    "correctAnswers": 18,
+    "incorrectAnswers": 12,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Business Logic:**
+- If `passed: true` (percentage >= 60%) AND `quizType: "BASIC_CALCULATION"`:
+  - Updates `user.passedBasicCalculationClass = classLevel`
+  - Only updates if the new class level is higher than existing one
+  - Example: If user already passed Class 4, won't update to Class 3
+
+---
+
+### 7.2 Get User Quiz History
+
+#### GET `/api/user/quiz/history`
+Retrieves all quiz attempts for the authenticated user with detailed information.
+
+**Authentication:** Required (Bearer token)
+
+**Query Parameters:**
+- `classLevel` (number, optional): Filter by class level
+- `quizType` (string, optional): Filter by quiz type (e.g., "BASIC_CALCULATION")
+- `passed` (boolean, optional): Filter by pass/fail status
+- `limit` (number, optional): Number of results to return (default: 10)
+- `skip` (number, optional): Number of results to skip (default: 0)
+
+**Example Request:**
+```
+GET /api/user/quiz/history?classLevel=3&passed=true&limit=5
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "attempts": [
+      {
+        "_id": "507f1f77bcf86cd799439011",
+        "userId": "507f1f77bcf86cd799439012",
+        "classLevel": 3,
+        "quizType": "BASIC_CALCULATION",
+        "score": 18,
+        "percentage": 60.0,
+        "totalQuestions": 30,
+        "correctAnswers": 18,
+        "incorrectAnswers": 12,
+        "passed": true,
+        "timeSpent": 3600,
+        "topicWise": {
+          "Addition": {
+            "correct": 5,
+            "total": 8,
+            "percentage": 62.5
+          }
+        },
+        "conceptWise": {
+          "Whole Number Addition": {
+            "correct": 3,
+            "total": 5,
+            "percentage": 60.0
+          }
+        },
+        "wrongConcepts": [
+          {
+            "concept": "Estimation and Verification",
+            "wrongCount": 2,
+            "totalQuestions": 4
+          }
+        ],
+        "wrongTopics": [
+          {
+            "topic": "Subtraction",
+            "wrongCount": 3,
+            "totalQuestions": 7
+          }
+        ],
+        "createdAt": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "total": 15,
+    "limit": 5,
+    "skip": 0
+  }
+}
+```
+
+**Note:** Questions array is excluded from history list for performance. Use the detailed attempt endpoint to get full question data.
+
+---
+
+### 7.3 Get Detailed Quiz Attempt
+
+#### GET `/api/user/quiz/attempt/:attemptId`
+Retrieves complete details of a specific quiz attempt including all questions and answers.
+
+**Authentication:** Required (Bearer token)
+
+**Path Parameters:**
+- `attemptId` (string, required): The quiz attempt ID
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "userId": "507f1f77bcf86cd799439012",
+    "classLevel": 3,
+    "quizType": "BASIC_CALCULATION",
+    "totalQuestions": 30,
+    "correctAnswers": 18,
+    "incorrectAnswers": 12,
+    "score": 18,
+    "percentage": 60.0,
+    "timeSpent": 3600,
+    "passed": true,
+    "overall": {
+      "score": 18,
+      "total": 30,
+      "correct": 18,
+      "percentage": 60.0
+    },
+    "topicWise": {
+      "Addition": {
+        "score": 5,
+        "total": 8,
+        "correct": 5,
+        "percentage": 62.5
+      },
+      "Subtraction": {
+        "score": 4,
+        "total": 7,
+        "correct": 4,
+        "percentage": 57.1
+      }
+    },
+    "conceptWise": {
+      "Whole Number Addition": {
+        "score": 3,
+        "total": 5,
+        "correct": 3,
+        "percentage": 60.0
+      }
+    },
+    "questions": [
+      {
+        "questionId": 1,
+        "question": "What is the sum of 234 and 567?",
+        "options": ["801", "791", "821", "831"],
+        "selectedAnswer": 1,
+        "selectedOption": "791",
+        "correctAnswer": 1,
+        "correctOption": "791",
+        "isCorrect": true,
+        "topicName": "Addition",
+        "concept": "Whole Number Addition",
+        "tag": "Adds two- and three-digit numbers with and without regrouping.",
+        "difficulty": "medium",
+        "timeSpent": 45,
+        "latex": false
+      },
+      {
+        "questionId": 2,
+        "question": "Subtract 456 from 789",
+        "options": ["333", "323", "343", "353"],
+        "selectedAnswer": 0,
+        "selectedOption": "333",
+        "correctAnswer": 1,
+        "correctOption": "323",
+        "isCorrect": false,
+        "topicName": "Subtraction",
+        "concept": "Whole Number Subtraction",
+        "tag": "Subtracts two- and three-digit numbers with and without regrouping.",
+        "difficulty": "medium",
+        "timeSpent": 60,
+        "latex": false
+      }
+    ],
+    "wrongConcepts": [
+      {
+        "concept": "Estimation and Verification",
+        "wrongCount": 2,
+        "totalQuestions": 4,
+        "percentage": 50.0,
+        "questions": [5, 12]
+      }
+    ],
+    "wrongTopics": [
+      {
+        "topic": "Subtraction",
+        "wrongCount": 3,
+        "totalQuestions": 7,
+        "percentage": 57.1,
+        "questions": [2, 8, 15]
+      }
+    ],
+    "remedialRecommendations": [
+      "Overall performance is below 60%. Focus on reviewing fundamental concepts.",
+      "Review Subtraction concepts - scored 57.1%"
+    ],
+    "createdAt": "2024-01-15T10:30:00Z",
+    "updatedAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+### 7.4 Get User Progress Summary
+
+#### GET `/api/user/progress`
+Retrieves overall progress summary including passed classes and performance statistics.
+
+**Authentication:** Required (Bearer token)
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "passedBasicCalculationClass": 3,
+    "totalAttempts": 15,
+    "totalPassed": 8,
+    "totalFailed": 7,
+    "averageScore": 65.5,
+    "classPerformance": {
+      "3": {
+        "attempts": 5,
+        "passed": 3,
+        "averageScore": 68.0,
+        "bestScore": 85.0
+      },
+      "4": {
+        "attempts": 10,
+        "passed": 5,
+        "averageScore": 63.0,
+        "bestScore": 75.0
+      }
+    },
+    "topicMastery": {
+      "Addition": 72.5,
+      "Subtraction": 65.0,
+      "Multiplication": 68.0,
+      "Division": 62.5
+    },
+    "conceptMastery": {
+      "Whole Number Addition": 75.0,
+      "Estimation and Verification": 60.0
+    }
+  }
+}
+```
+
+**Response Fields:**
+- `passedBasicCalculationClass`: Highest class level passed
+- `totalAttempts`: Total number of quiz attempts
+- `totalPassed`: Number of passed attempts
+- `totalFailed`: Number of failed attempts
+- `averageScore`: Average percentage across all attempts
+- `classPerformance`: Performance breakdown by class level
+- `topicMastery`: Average mastery percentage per topic
+- `conceptMastery`: Average mastery percentage per concept
+
+---
+
+## 8. Profile Management
+
+### 8.1 Get User Profile
+
+#### GET `/api/user/profile`
+Retrieves user profile including passed class levels.
+
+**Authentication:** Required (Bearer token)
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "mobile": "+1234567890",
+    "role": "user",
+    "grade": "Grade 4",
+    "avatar": "https://example.com/avatar.jpg",
+    "passedBasicCalculationClass": 3,
+    "passedClasses": {
+      "BASIC_CALCULATION": 3,
+      "ADVANCED_ALGEBRA": null,
+      "THERMODYNAMICS": null
+    },
+    "createdAt": "2024-01-01T00:00:00Z",
+    "updatedAt": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Response Fields:**
+- `passedBasicCalculationClass`: Highest passed class level for BASIC_CALCULATION
+- `passedClasses`: Object containing passed class levels for each quiz type
+
+---
+
+### 8.2 Get Topics for a Class
+
+#### GET `/api/user/classes/:classLevel/topics`
+Retrieves all topics available for a specific class level.
+
+**Authentication:** Required (Bearer token)
+
+**Path Parameters:**
+- `classLevel` (number, required): The class level (e.g., 3, 4, 5)
+
+**Example Request:**
+```
+GET /api/user/classes/3/topics
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "classLevel": 3,
+  "className": "Class 3",
+  "topics": [
+    {
+      "topicName": "Addition",
+      "description": "Learning outcomes for Addition in Class 3",
+      "concepts": [
+        "Whole Number Addition",
+        "Estimation and Verification",
+        "Addition Strategies and Reasoning"
+      ],
+      "totalTags": 6,
+      "learningOutcomes": [
+        {
+          "_id": "69731ca6ca1872c253a98db8",
+          "text": "Adds two- and three-digit numbers with and without regrouping...",
+          "type": "BASIC_CALCULATION"
+        }
+      ]
+    },
+    {
+      "topicName": "Subtraction",
+      "description": "Learning outcomes for Subtraction in Class 3",
+      "concepts": [
+        "Whole Number Subtraction",
+        "Estimation and Verification",
+        "Problem Solving and Application",
+        "Strategies and Explanation"
+      ],
+      "totalTags": 6,
+      "learningOutcomes": [
+        {
+          "_id": "69731d50ca1872c253a98e75",
+          "text": "Subtracts two- and three-digit numbers with and without regrouping...",
+          "type": "BASIC_CALCULATION"
+        }
+      ]
+    },
+    {
+      "topicName": "Multiplication",
+      "description": "Learning outcomes for Multiplication in Class 3",
+      "concepts": [
+        "Multiplication Foundations",
+        "Whole Number Multiplication",
+        "Problem Solving Applications"
+      ],
+      "totalTags": 6,
+      "learningOutcomes": [
+        {
+          "_id": "69731de7ca1872c253a98f44",
+          "text": "Understands multiplication as repeated addition and equal grouping...",
+          "type": "BASIC_CALCULATION"
+        }
+      ]
+    },
+    {
+      "topicName": "Division",
+      "description": "Learning outcomes for Division in Class 3",
+      "concepts": [
+        "Division Fundamentals",
+        "Division Algorithms and Procedures",
+        "Verification and Estimation",
+        "Problem Solving and Applications"
+      ],
+      "totalTags": 6,
+      "learningOutcomes": [
+        {
+          "_id": "69731e6aca1872c253a99190",
+          "text": "Understands division as equal sharing and equal grouping...",
+          "type": "BASIC_CALCULATION"
+        }
+      ]
+    }
+  ],
+  "totalTopics": 4
+}
+```
+
+**Response Fields:**
+- `classLevel`: The requested class level
+- `className`: Name of the class
+- `topics`: Array of topics with their concepts and learning outcomes
+  - `topicName`: Name of the topic
+  - `description`: Description of the topic
+  - `concepts`: Array of concept names from ConceptGraph
+  - `totalTags`: Total number of tags across all learning outcomes
+  - `learningOutcomes`: Array of learning outcomes for this topic
+
+---
+
 ## Notes
 
 1. **Email/Mobile Login**: Users can login with either email or mobile number using the `identifier` field.
@@ -774,6 +1303,12 @@ const resetResponse = await fetch('https://academic-7mkg.onrender.com/api/user/r
 5. **BASIC_CALCULATION Type**: Learning outcomes endpoints specifically fetch `BASIC_CALCULATION` type outcomes.
 
 6. **Tag Mappings**: The concepts-with-tags endpoint returns tag progressions (fromTag → toTag) from learning outcome mappings.
+
+7. **Quiz Submission**: When submitting quiz results, the system automatically updates the user's `passedBasicCalculationClass` if they pass (percentage >= 60%) and the new class level is higher than the existing one.
+
+8. **Profile Updates**: User profile is automatically updated when they pass a quiz. The `passedBasicCalculationClass` field stores the highest class level passed.
+
+9. **Progress Tracking**: The progress endpoint calculates statistics across all quiz attempts, including topic and concept mastery percentages.
 
 ---
 
