@@ -26,6 +26,9 @@ app.use('/api/student', studentRoutes);
 const analyticsRoutes = require('./routes/analyticsRoutes');
 app.use('/api', analyticsRoutes);
 
+const userRoutes = require('./routes/userRoutes');
+app.use('/api/user', userRoutes);
+
 app.get('/', (req, res) => {
     res.send('Academic Audit System API is running...');
 });
