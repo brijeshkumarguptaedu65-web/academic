@@ -19,15 +19,19 @@
 
 ### Registration Flow
 1. **Register** → User provides name, email, mobile, password
-2. **OTP Sent** → 8-digit OTP sent to email (valid for 15 minutes)
-3. **Verify OTP** → User enters OTP to complete registration
-4. **Login** → User can now login with email/mobile + password
+2. **OTP Generated** → Backend generates 8-digit OTP and returns it in response (valid for 15 minutes)
+3. **Frontend Displays OTP** → User sees OTP on screen
+4. **Verify OTP** → User enters OTP to complete registration
+5. **Login** → User can now login with email/mobile + password
 
 ### Password Reset Flow
 1. **Forgot Password** → User requests password reset
-2. **OTP Sent** → 8-digit OTP sent to email (valid for 15 minutes)
-3. **Reset Password** → User verifies OTP and sets new password
-4. **Login** → User can login with new password
+2. **OTP Generated** → Backend generates 8-digit OTP and returns it in response (valid for 15 minutes)
+3. **Frontend Displays OTP** → User sees OTP on screen
+4. **Reset Password** → User verifies OTP and sets new password
+5. **Login** → User can login with new password
+
+**Note**: OTP is returned directly in the API response. No email service is required.
 
 ---
 
@@ -38,7 +42,7 @@
 ### 1. Registration
 
 #### POST `/api/user/register`
-Register a new user. Sends OTP to email for verification.
+Register a new user. Generates OTP and returns it in the response for frontend verification.
 
 **Request Body:**
 ```json
@@ -53,11 +57,17 @@ Register a new user. Sends OTP to email for verification.
 **Response (201 Created):**
 ```json
 {
-  "message": "OTP sent to your email. Please verify to complete registration.",
+  "message": "Registration successful. Please verify OTP to complete registration.",
   "userId": "507f1f77bcf86cd799439011",
-  "email": "john.doe@example.com"
+  "email": "john.doe@example.com",
+  "otp": "12345678",
+  "expiresIn": 900
 }
 ```
+
+**Response Fields:**
+- `otp` - 8-digit OTP code (display to user for verification)
+- `expiresIn` - OTP expiry time in seconds (900 = 15 minutes)
 
 **Error Responses:**
 - `400` - Missing required fields
@@ -107,7 +117,7 @@ Verify OTP to complete registration.
 ### 3. Resend OTP
 
 #### POST `/api/user/resend-otp`
-Resend OTP to user's email.
+Generate a new OTP and return it in the response.
 
 **Request Body:**
 ```json
@@ -119,10 +129,16 @@ Resend OTP to user's email.
 **Response (200 OK):**
 ```json
 {
-  "message": "OTP has been resent to your email.",
-  "email": "john.doe@example.com"
+  "message": "New OTP generated. Please verify to complete registration.",
+  "email": "john.doe@example.com",
+  "otp": "87654321",
+  "expiresIn": 900
 }
 ```
+
+**Response Fields:**
+- `otp` - New 8-digit OTP code (display to user for verification)
+- `expiresIn` - OTP expiry time in seconds (900 = 15 minutes)
 
 **Error Responses:**
 - `400` - Missing email
@@ -187,7 +203,7 @@ Login with email/mobile and password.
 ### 5. Forgot Password
 
 #### POST `/api/user/forgot-password`
-Request password reset OTP.
+Generate password reset OTP and return it in the response.
 
 **Request Body:**
 ```json
@@ -206,10 +222,16 @@ Request password reset OTP.
 **Response (200 OK):**
 ```json
 {
-  "message": "Password reset OTP has been sent to your email.",
-  "email": "john.doe@example.com"
+  "message": "Password reset OTP generated. Please verify to reset password.",
+  "email": "john.doe@example.com",
+  "otp": "12345678",
+  "expiresIn": 900
 }
 ```
+
+**Response Fields:**
+- `otp` - 8-digit OTP code (display to user for verification)
+- `expiresIn` - OTP expiry time in seconds (900 = 15 minutes)
 
 **Error Responses:**
 - `400` - Missing identifier
@@ -394,11 +416,15 @@ curl -X POST https://academic-7mkg.onrender.com/api/user/register \
 **Response:**
 ```json
 {
-  "message": "OTP sent to your email. Please verify to complete registration.",
+  "message": "Registration successful. Please verify OTP to complete registration.",
   "userId": "507f1f77bcf86cd799439011",
-  "email": "testuser@example.com"
+  "email": "testuser@example.com",
+  "otp": "12345678",
+  "expiresIn": 900
 }
 ```
+
+**Note**: The OTP is returned in the response. Display it to the user on the frontend.
 
 #### Step 2: Verify OTP
 ```bash
@@ -465,10 +491,14 @@ curl -X POST https://academic-7mkg.onrender.com/api/user/forgot-password \
 **Response:**
 ```json
 {
-  "message": "Password reset OTP has been sent to your email.",
-  "email": "testuser@example.com"
+  "message": "Password reset OTP generated. Please verify to reset password.",
+  "email": "testuser@example.com",
+  "otp": "12345678",
+  "expiresIn": 900
 }
 ```
+
+**Note**: The OTP is returned in the response. Display it to the user on the frontend.
 
 #### Step 2: Reset Password
 ```bash
@@ -570,26 +600,21 @@ All endpoints return consistent error responses:
 ## Testing Guide
 
 ### Prerequisites
-1. Ensure email service is configured in `.env`:
-   ```
-   EMAIL_HOST=smtp.gmail.com
-   EMAIL_PORT=587
-   EMAIL_USER=your-email@gmail.com
-   EMAIL_PASS=your-app-password
-   EMAIL_FROM=your-email@gmail.com
-   ```
-
-2. Ensure JWT_SECRET is set in `.env`
+1. Ensure JWT_SECRET is set in `.env`
+2. Ensure MONGO_URI is set in `.env`
+3. **No email service required** - OTP is returned in API response
 
 ### Test Registration Flow
-1. **Register** → Check email for OTP
-2. **Verify OTP** → Get JWT token
-3. **Login** → Verify token works
+1. **Register** → Get OTP from response
+2. **Display OTP** → Show OTP to user on frontend
+3. **Verify OTP** → User enters OTP, get JWT token
+4. **Login** → Verify token works
 
 ### Test Password Reset Flow
-1. **Forgot Password** → Check email for OTP
-2. **Reset Password** → Verify password changed
-3. **Login with New Password** → Verify login works
+1. **Forgot Password** → Get OTP from response
+2. **Display OTP** → Show OTP to user on frontend
+3. **Reset Password** → User enters OTP and new password
+4. **Login with New Password** → Verify login works
 
 ### Test Learning Outcomes
 1. **Get Classes** → Verify class list
@@ -598,22 +623,27 @@ All endpoints return consistent error responses:
 
 ---
 
-## Email Service
+## OTP Service
 
-### OTP Email Template
-The system sends OTP emails with:
-- **8-digit authentication code**
-- **15-minute expiry notice**
-- **Security reminder**
-- **Academic Audit branding**
+### OTP Generation
+- **8-digit random code** generated on backend
+- **Returned in API response** (no email required)
+- **Valid for 15 minutes** (900 seconds)
+
+### OTP Flow
+1. **Backend generates OTP** when user registers/resets password
+2. **OTP returned in response** - Frontend displays it to user
+3. **User enters OTP** - Frontend sends to verify endpoint
+4. **Backend verifies OTP** - Completes registration/password reset
 
 ### OTP Types
 - `registration` - For email verification during registration
 - `password_reset` - For password reset requests
 
 ### OTP Expiry
-- OTPs expire after **15 minutes**
+- OTPs expire after **15 minutes** (900 seconds)
 - Users can request a new OTP using `/resend-otp`
+- Expired OTPs cannot be used for verification
 
 ---
 
@@ -632,19 +662,93 @@ Authorization: Bearer <token>
 
 ---
 
+## Frontend Integration Guide
+
+### Registration Flow Implementation
+
+```javascript
+// Step 1: Register user
+const registerResponse = await fetch('https://academic-7mkg.onrender.com/api/user/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'John Doe',
+    email: 'john@example.com',
+    mobile: '9876543210',
+    password: 'Secure@123'
+  })
+});
+
+const registerData = await registerResponse.json();
+
+// Step 2: Display OTP to user
+console.log('OTP:', registerData.otp);
+// Show OTP on screen: "Your verification code is: 12345678"
+
+// Step 3: User enters OTP, verify it
+const verifyResponse = await fetch('https://academic-7mkg.onrender.com/api/user/verify-otp', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'john@example.com',
+    otp: registerData.otp // or user-entered OTP
+  })
+});
+
+const verifyData = await verifyResponse.json();
+
+// Step 4: Save token and redirect
+localStorage.setItem('token', verifyData.token);
+// Redirect to dashboard
+```
+
+### Password Reset Flow Implementation
+
+```javascript
+// Step 1: Request password reset
+const forgotResponse = await fetch('https://academic-7mkg.onrender.com/api/user/forgot-password', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    identifier: 'john@example.com'
+  })
+});
+
+const forgotData = await forgotResponse.json();
+
+// Step 2: Display OTP to user
+console.log('OTP:', forgotData.otp);
+// Show OTP on screen
+
+// Step 3: User enters OTP and new password
+const resetResponse = await fetch('https://academic-7mkg.onrender.com/api/user/reset-password', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'john@example.com',
+    otp: forgotData.otp,
+    newPassword: 'NewSecure@123'
+  })
+});
+```
+
+---
+
 ## Notes
 
 1. **Email/Mobile Login**: Users can login with either email or mobile number using the `identifier` field.
 
-2. **OTP Verification**: All OTPs are 8-digit codes valid for 15 minutes.
+2. **OTP Verification**: All OTPs are 8-digit codes valid for 15 minutes. OTP is returned in API response, not sent via email.
 
-3. **Previous Class Logic**: 
+3. **No Email Service Required**: The system returns OTP directly in the API response. Frontend should display it to the user.
+
+4. **Previous Class Logic**: 
    - For class level 5, learning outcomes are fetched from class level 4
    - Minimum class level is 2 (to fetch from class 1)
 
-4. **BASIC_CALCULATION Type**: Learning outcomes endpoints specifically fetch `BASIC_CALCULATION` type outcomes.
+5. **BASIC_CALCULATION Type**: Learning outcomes endpoints specifically fetch `BASIC_CALCULATION` type outcomes.
 
-5. **Tag Mappings**: The concepts-with-tags endpoint returns tag progressions (fromTag → toTag) from learning outcome mappings.
+6. **Tag Mappings**: The concepts-with-tags endpoint returns tag progressions (fromTag → toTag) from learning outcome mappings.
 
 ---
 

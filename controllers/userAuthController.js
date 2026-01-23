@@ -86,28 +86,15 @@ const registerUser = async (req, res) => {
             });
         }
 
-        // Send OTP email (non-blocking - don't fail registration if email fails)
-        const emailResult = await sendOTPEmail(email, otp, 'registration');
-        
-        if (!emailResult.success) {
-            console.error('Failed to send OTP email, but user created:', emailResult.error);
-            // Still return success, but include OTP in response for development/testing
-            // In production, you might want to queue the email or use a different approach
-            res.status(201).json({
-                message: 'Registration successful, but email delivery failed. Please contact support.',
-                userId: user._id,
-                email: user.email,
-                otp: process.env.NODE_ENV === 'development' ? otp : undefined, // Only show OTP in development
-                emailError: process.env.NODE_ENV === 'development' ? emailResult.error : undefined,
-                warning: 'Email service unavailable. Please use resend-otp endpoint or contact support.'
-            });
-        } else {
-            res.status(201).json({
-                message: 'OTP sent to your email. Please verify to complete registration.',
-                userId: user._id,
-                email: user.email,
-            });
-        }
+        // Skip email sending - return OTP in response for frontend verification
+        // Frontend will display the OTP and user will verify it
+        res.status(201).json({
+            message: 'Registration successful. Please verify OTP to complete registration.',
+            userId: user._id,
+            email: user.email,
+            otp: otp, // Return OTP in response for frontend verification
+            expiresIn: OTP_EXPIRY_MINUTES * 60, // OTP expires in seconds
+        });
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ message: 'Server error during registration', error: error.message });
@@ -206,22 +193,12 @@ const resendOTP = async (req, res) => {
         user.otpExpiry = otpExpiry;
         await user.save();
 
-        // Send OTP email
-        const otpType = user.otpType || 'registration';
-        const emailResult = await sendOTPEmail(email, otp, otpType);
-        
-        if (!emailResult.success) {
-            console.error('Failed to resend OTP email:', emailResult.error);
-            return res.status(500).json({
-                message: 'Failed to send OTP email. Please try again later or contact support.',
-                email: user.email,
-                error: process.env.NODE_ENV === 'development' ? emailResult.error : undefined
-            });
-        }
-
+        // Skip email sending - return OTP in response for frontend verification
         res.json({
-            message: 'OTP has been resent to your email.',
+            message: 'New OTP generated. Please verify to complete registration.',
             email: user.email,
+            otp: otp, // Return OTP in response for frontend verification
+            expiresIn: OTP_EXPIRY_MINUTES * 60, // OTP expires in seconds
         });
     } catch (error) {
         console.error('Resend OTP error:', error);
@@ -310,21 +287,12 @@ const forgotPassword = async (req, res) => {
         user.otpType = 'password_reset';
         await user.save();
 
-        // Send OTP email
-        const emailResult = await sendOTPEmail(user.email, otp, 'password_reset');
-        
-        if (!emailResult.success) {
-            console.error('Failed to send password reset OTP email:', emailResult.error);
-            return res.status(500).json({
-                message: 'Failed to send password reset OTP. Please try again later or contact support.',
-                email: user.email,
-                error: process.env.NODE_ENV === 'development' ? emailResult.error : undefined
-            });
-        }
-
+        // Skip email sending - return OTP in response for frontend verification
         res.json({
-            message: 'Password reset OTP has been sent to your email.',
+            message: 'Password reset OTP generated. Please verify to reset password.',
             email: user.email,
+            otp: otp, // Return OTP in response for frontend verification
+            expiresIn: OTP_EXPIRY_MINUTES * 60, // OTP expires in seconds
         });
     } catch (error) {
         console.error('Forgot password error:', error);
