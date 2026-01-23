@@ -68,14 +68,52 @@ const getLearningOutcomes = async (req, res) => {
         }
         // For BASIC_CALCULATION, subjectId is ignored even if provided
 
-        const outcomes = await LearningOutcome.find(query)
-            .populate('classId', 'name level')
+        // Fetch outcomes with populate
+        let outcomes = await LearningOutcome.find(query)
+            .populate({
+                path: 'classId',
+                select: 'name level',
+                match: { level: { $ne: null } } // Only populate if level is not null
+            })
             .populate('subjectId', 'name')
-            .sort({ createdAt: -1 })
             .lean(); // Use lean() to get plain objects
         
-        // Filter out outcomes with null classId
-        const validOutcomes = outcomes.filter(o => o.classId && o.classId.level);
+        // Sort after populate to avoid issues with null classId
+        outcomes = outcomes.sort((a, b) => {
+            // Sort by class level if both exist
+            const levelA = a.classId?.level ?? 0;
+            const levelB = b.classId?.level ?? 0;
+            if (levelA !== levelB) {
+                return levelA - levelB;
+            }
+            // Then by createdAt
+            return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        });
+        
+        // Filter out outcomes with null classId - be very strict
+        const validOutcomes = outcomes.filter(o => {
+            try {
+                if (!o) {
+                    return false;
+                }
+                if (!o.classId) {
+                    console.warn(`Skipping outcome ${o._id} - null classId`);
+                    return false;
+                }
+                // Safely check level - use optional chaining
+                const level = o.classId?.level;
+                if (level === null || level === undefined) {
+                    console.warn(`Skipping outcome ${o._id} - classId.level is null/undefined`);
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                console.warn(`Error filtering outcome ${o?._id}:`, err.message);
+                return false;
+            }
+        });
+        
+        console.log(`Filtered ${outcomes.length} outcomes to ${validOutcomes.length} valid outcomes`);
 
         // Get all learning outcome IDs for mapping lookup
         const outcomeIds = validOutcomes.map(o => o._id);
@@ -87,9 +125,50 @@ const getLearningOutcomes = async (req, res) => {
         // Add remedials and mappings to each outcome
         const outcomesWithRemedials = await Promise.all(
             validOutcomes.map(async (outcome) => {
-                const obj = outcome.toObject();
-                obj.id = obj._id;
-                obj.contents = obj.contents || [];
+                try {
+                    // Since we used .lean(), outcome is already a plain object
+                    const obj = { ...outcome };
+                    obj.id = obj._id.toString();
+                    obj.contents = obj.contents || [];
+                
+                // Ensure classId and subjectId are properly formatted with null checks
+                // Double-check classId exists (should already be filtered, but be safe)
+                if (!obj.classId) {
+                    console.warn(`Skipping outcome ${obj.id} - null classId`);
+                    return null;
+                }
+                
+                // Safely access classId.level using optional chaining
+                // Allow level 0 as valid
+                const classLevel = obj.classId?.level;
+                if (classLevel === null || classLevel === undefined) {
+                    console.warn(`Skipping outcome ${obj.id} - classId.level is null/undefined`);
+                    return null;
+                }
+                
+                // Format classId object safely
+                if (typeof obj.classId === 'object' && obj.classId !== null) {
+                    obj.classId = {
+                        _id: obj.classId._id || obj.classId,
+                        name: obj.classId.name || `Class ${classLevel}`,
+                        level: classLevel
+                    };
+                } else {
+                    console.warn(`Skipping outcome ${obj.id} - classId is not an object`);
+                    return null;
+                }
+                
+                if (obj.subjectId && typeof obj.subjectId === 'object') {
+                    obj.subjectId = {
+                        _id: obj.subjectId._id || obj.subjectId,
+                        name: obj.subjectId.name || 'Unknown'
+                    };
+                } else if (!obj.subjectId) {
+                    obj.subjectId = {
+                        _id: null,
+                        name: 'Unknown'
+                    };
+                }
                 
                 // Get remedials
                 const remedial = await LearningOutcomeRemedial.findOne({ 
@@ -108,11 +187,25 @@ const getLearningOutcomes = async (req, res) => {
                     const mappedOutcomes = await LearningOutcome.find({
                         _id: { $in: mappedOutcomeIds }
                     })
-                    .populate('classId', 'name level')
-                    .populate('subjectId', 'name');
+                    .populate({
+                        path: 'classId',
+                        select: 'name level',
+                        match: { level: { $ne: null } } // Only populate if level is not null
+                    })
+                    .populate('subjectId', 'name')
+                    .lean(); // Use lean() for consistency
+                    
+                    // Filter out mapped outcomes with null classId
+                    const validMappedOutcomes = mappedOutcomes.filter(o => {
+                        try {
+                            return o && o.classId && (o.classId.level !== null && o.classId.level !== undefined);
+                        } catch (err) {
+                            return false;
+                        }
+                    });
 
                     obj.mappedLearningOutcomes = mapping.mappedLearningOutcomes.map(mo => {
-                        const mappedOutcome = mappedOutcomes.find(
+                        const mappedOutcome = validMappedOutcomes.find(
                             o => o._id.toString() === mo.mappedLearningOutcomeId.toString()
                         );
                         
@@ -122,15 +215,25 @@ const getLearningOutcomes = async (req, res) => {
                             return null;
                         }
                         
+                        // Ensure classId and subjectId are properly formatted
+                        const classIdObj = mappedOutcome.classId;
+                        const subjectIdObj = mappedOutcome.subjectId;
+                        
+                        // Double-check classIdObj exists and has level
+                        if (!classIdObj || classIdObj.level === null || classIdObj.level === undefined) {
+                            console.warn(`Skipping mapping - invalid classIdObj for outcome ${mo.mappedLearningOutcomeId}`);
+                            return null;
+                        }
+                        
                         return {
                             learningOutcomeId: mo.mappedLearningOutcomeId.toString(),
                             learningOutcome: {
                                 id: mappedOutcome._id.toString(),
                                 text: mappedOutcome.text,
-                                tags: mappedOutcome.text.split(',').map(t => t.trim()),
-                                classLevel: mappedOutcome.classId.level,
-                                className: mappedOutcome.classId.name || `Class ${mappedOutcome.classId.level}`,
-                                topicName: mappedOutcome.topicName,
+                                tags: mappedOutcome.text ? mappedOutcome.text.split(',').map(t => t.trim()) : [],
+                                classLevel: classIdObj.level,
+                                className: classIdObj.name || `Class ${classIdObj.level}`,
+                                topicName: mappedOutcome.topicName || '',
                                 type: mappedOutcome.type
                             },
                             mappingType: mo.mappingType,
@@ -145,12 +248,24 @@ const getLearningOutcomes = async (req, res) => {
                 }
                 
                 return obj;
+                } catch (err) {
+                    console.error(`Error processing outcome ${outcome?._id}:`, err.message);
+                    console.error(err.stack);
+                    return null; // Return null to filter out later
+                }
             })
         );
 
-        res.json(outcomesWithRemedials);
+        // Filter out any null outcomes (skipped due to invalid data)
+        const finalOutcomes = outcomesWithRemedials.filter(o => o !== null);
+
+        res.json(finalOutcomes);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error('Error in getLearningOutcomes:', err);
+        res.status(500).json({ 
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 };
 
