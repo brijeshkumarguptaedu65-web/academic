@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { Class } = require('../models/Metadata');
+const { Class, Subject } = require('../models/Metadata');
 const LearningOutcome = require('../models/LearningOutcome');
 const ConceptGraph = require('../models/ConceptGraph');
 
@@ -98,11 +98,23 @@ const getTopicsForClass = async (req, res) => {
             });
         }
 
-        // Get learning outcomes for this class with type BASIC_CALCULATION
+        // Find Mathematics subject
+        const mathematicsSubject = await Subject.findOne({ name: 'Mathematics' });
+        if (!mathematicsSubject) {
+            return res.status(404).json({
+                success: false,
+                message: 'Mathematics subject not found'
+            });
+        }
+
+        // Get learning outcomes for this class with type SUBJECT and Mathematics subjectId
         const learningOutcomes = await LearningOutcome.find({
             classId: classData._id,
-            type: 'BASIC_CALCULATION'
-        }).populate('classId', 'name level').lean();
+            type: 'SUBJECT',
+            subjectId: mathematicsSubject._id
+        }).populate('classId', 'name level')
+          .populate('subjectId', 'name')
+          .lean();
 
         // Get unique topics
         const topicMap = new Map();
@@ -122,12 +134,12 @@ const getTopicsForClass = async (req, res) => {
             });
         });
 
-        // Get concept graphs for all topics
+        // Get concept graphs for all topics with SUBJECT type and Mathematics subjectId
         const topics = Array.from(topicMap.keys());
         const conceptGraphs = await ConceptGraph.find({
             topic: { $in: topics },
-            type: 'BASIC_CALCULATION',
-            subjectId: null
+            type: 'SUBJECT',
+            subjectId: mathematicsSubject._id
         }).lean();
 
         // Create a map: topic -> concept graph
@@ -279,13 +291,23 @@ const getTopicTagsWithConcepts = async (req, res) => {
             });
         }
 
+        // Find Mathematics subject
+        const mathematicsSubject = await Subject.findOne({ name: 'Mathematics' });
+        if (!mathematicsSubject) {
+            return res.status(404).json({
+                success: false,
+                message: 'Mathematics subject not found'
+            });
+        }
+
         // Normalize topic name (handle "No Topic" case)
         const normalizedTopicName = topicName === 'No Topic' ? null : topicName;
 
-        // Get learning outcomes for this class and topic with type BASIC_CALCULATION
+        // Get learning outcomes for this class and topic with type SUBJECT and Mathematics subjectId
         const query = {
             classId: classData._id,
-            type: 'BASIC_CALCULATION'
+            type: 'SUBJECT',
+            subjectId: mathematicsSubject._id
         };
         
         // Handle null topicName
@@ -300,6 +322,7 @@ const getTopicTagsWithConcepts = async (req, res) => {
 
         const learningOutcomes = await LearningOutcome.find(query)
             .populate('classId', 'name level')
+            .populate('subjectId', 'name')
             .lean();
 
         if (learningOutcomes.length === 0) {
@@ -309,12 +332,12 @@ const getTopicTagsWithConcepts = async (req, res) => {
             });
         }
 
-        // Fetch concept graph for this topic (use normalized topic name)
+        // Fetch concept graph for this topic (use normalized topic name) with SUBJECT type and Mathematics subjectId
         const conceptGraphTopic = normalizedTopicName || 'No Topic';
         const conceptGraph = await ConceptGraph.findOne({
             topic: conceptGraphTopic,
-            type: 'BASIC_CALCULATION',
-            subjectId: null
+            type: 'SUBJECT',
+            subjectId: mathematicsSubject._id
         }).lean();
 
         // Create a map: tag -> concept name
@@ -325,7 +348,7 @@ const getTopicTagsWithConcepts = async (req, res) => {
                 const conceptName = conceptGraphItem.concept;
                 conceptGraphItem.nodes.forEach(node => {
                     const normalizedTag = node.tag.toLowerCase().trim();
-                    const key = `${topicName}|${normalizedTag}`;
+                    const key = `${conceptGraphTopic}|${normalizedTag}`;
                     tagConceptMap.set(key, conceptName);
                 });
             });
