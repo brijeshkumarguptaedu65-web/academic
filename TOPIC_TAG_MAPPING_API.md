@@ -42,64 +42,79 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/learning-outcomes/by-t
 ```json
 {
   "success": true,
-  "totalTopics": 3,
-  "totalLearningOutcomes": 10,
+  "totalTopics": 14,
+  "totalLearningOutcomes": 57,
   "topics": [
     {
-      "topicName": "Addition",
+      "topicName": "Algebraic Expressions, Identities and Factorisation",
       "learningOutcomes": [
         {
-          "id": "6971d1424f0073675925cadf",
-          "text": "Understanding addition (1–10), adding single-digit numbers (1–20), solving simple addition word problems",
+          "id": "69733c5b285ad1330ea3315a",
+          "text": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
           "tags": [
-            "Understanding addition (1–10)",
-            "adding single-digit numbers (1–20)",
-            "solving simple addition word problems"
+            "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle."
           ],
           "classId": {
-            "_id": "696f1f53219928cc7c5cb84c",
-            "name": "Class 2",
-            "level": 2
+            "_id": "696f1f59219928cc7c5cb8f3",
+            "name": "Class 6",
+            "level": 6
           },
           "subjectId": {
             "_id": "696f1e32570003266cdcf305",
             "name": "Mathematics"
           },
           "type": "SUBJECT",
-          "createdAt": "2026-01-22T07:26:58.476Z",
-          "updatedAt": "2026-01-22T07:26:58.476Z"
+          "createdAt": "2026-01-23T09:16:11.172Z",
+          "updatedAt": "2026-01-23T09:16:11.172Z"
         },
         {
-          "id": "6971d19b4f0073675925cb01",
-          "text": "adding two-digit numbers with carry (up to 99), adding three or more numbers",
+          "id": "69733c6d285ad1330ea33275",
+          "text": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
           "tags": [
-            "adding two-digit numbers with carry (up to 99)",
-            "adding three or more numbers"
+            "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions."
           ],
           "classId": {
-            "_id": "696f1e32570003266cdcf2ff",
-            "name": "Class 3",
-            "level": 3
+            "_id": "696f1f5a219928cc7c5cb914",
+            "name": "Class 7",
+            "level": 7
           },
           "subjectId": {
             "_id": "696f1e32570003266cdcf305",
             "name": "Mathematics"
           },
           "type": "SUBJECT",
-          "createdAt": "2026-01-22T07:28:27.674Z",
-          "updatedAt": "2026-01-22T07:28:27.674Z"
+          "createdAt": "2026-01-23T09:16:29.503Z",
+          "updatedAt": "2026-01-23T09:16:29.503Z"
+        },
+        {
+          "id": "69733c7c285ad1330ea333b8",
+          "text": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+          "tags": [
+            "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems."
+          ],
+          "classId": {
+            "_id": "696f1f5c219928cc7c5cb93e",
+            "name": "Class 8",
+            "level": 8
+          },
+          "subjectId": {
+            "_id": "696f1e32570003266cdcf305",
+            "name": "Mathematics"
+          },
+          "type": "SUBJECT",
+          "createdAt": "2026-01-23T09:16:44.929Z",
+          "updatedAt": "2026-01-23T09:16:44.929Z"
         }
       ]
     },
     {
-      "topicName": "Subtraction",
+      "topicName": "Data Handling",
       "learningOutcomes": [
         {
-          "id": "6971e75bb6d3c35f5fc38a54",
-          "text": "subtract single-digit numbers, subtract two-digit numbers",
+          "id": "69733a9e285ad1330ea315d7",
+          "text": "Records data using tally marks.\nRepresents data pictorially using pictographs.\nDraws simple conclusions from pictorial data.",
           "tags": [
-            "subtract single-digit numbers",
-            "subtract two-digit numbers"
+            "Records data using tally marks.\nRepresents data pictorially using pictographs.\nDraws simple conclusions from pictorial data."
           ],
           "classId": {
             "_id": "696f1e32570003266cdcf2ff",
@@ -111,8 +126,107 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/learning-outcomes/by-t
             "name": "Mathematics"
           },
           "type": "SUBJECT",
-          "createdAt": "2026-01-22T09:01:15.670Z",
-          "updatedAt": "2026-01-22T09:01:15.670Z"
+          "createdAt": "2026-01-23T09:08:46.220Z",
+          "updatedAt": "2026-01-23T09:08:46.220Z"
+        },
+        {
+          "id": "69733af3285ad1330ea31dcc",
+          "text": "Represents collected information in tables.\nRepresents data using bar graphs.\nDraws simple inferences from tables and bar graphs.",
+          "tags": [
+            "Represents collected information in tables.\nRepresents data using bar graphs.\nDraws simple inferences from tables and bar graphs."
+          ],
+          "classId": {
+            "_id": "696f1e32570003266cdcf302",
+            "name": "Class 4",
+            "level": 4
+          },
+          "subjectId": {
+            "_id": "696f1e32570003266cdcf305",
+            "name": "Mathematics"
+          },
+          "type": "SUBJECT",
+          "createdAt": "2026-01-23T09:10:11.060Z",
+          "updatedAt": "2026-01-23T09:10:11.060Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Actual API Response Example
+
+**Request:**
+```bash
+GET /api/admin/learning-outcomes/by-topic?type=SUBJECT&subjectId=696f1e32570003266cdcf305
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "totalTopics": 14,
+  "totalLearningOutcomes": 57,
+  "topics": [
+    {
+      "topicName": "Algebraic Expressions, Identities and Factorisation",
+      "learningOutcomes": [
+        {
+          "id": "69733c5b285ad1330ea3315a",
+          "text": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+          "tags": [
+            "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle."
+          ],
+          "classId": {
+            "_id": "696f1f59219928cc7c5cb8f3",
+            "name": "Class 6",
+            "level": 6
+          },
+          "subjectId": {
+            "_id": "696f1e32570003266cdcf305",
+            "name": "Mathematics"
+          },
+          "type": "SUBJECT",
+          "createdAt": "2026-01-23T09:16:11.172Z",
+          "updatedAt": "2026-01-23T09:16:11.172Z"
+        },
+        {
+          "id": "69733c6d285ad1330ea33275",
+          "text": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+          "tags": [
+            "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions."
+          ],
+          "classId": {
+            "_id": "696f1f5a219928cc7c5cb914",
+            "name": "Class 7",
+            "level": 7
+          },
+          "subjectId": {
+            "_id": "696f1e32570003266cdcf305",
+            "name": "Mathematics"
+          },
+          "type": "SUBJECT",
+          "createdAt": "2026-01-23T09:16:29.503Z",
+          "updatedAt": "2026-01-23T09:16:29.503Z"
+        },
+        {
+          "id": "69733c7c285ad1330ea333b8",
+          "text": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+          "tags": [
+            "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems."
+          ],
+          "classId": {
+            "_id": "696f1f5c219928cc7c5cb93e",
+            "name": "Class 8",
+            "level": 8
+          },
+          "subjectId": {
+            "_id": "696f1e32570003266cdcf305",
+            "name": "Mathematics"
+          },
+          "type": "SUBJECT",
+          "createdAt": "2026-01-23T09:16:44.929Z",
+          "updatedAt": "2026-01-23T09:16:44.929Z"
         }
       ]
     }
@@ -170,7 +284,13 @@ GET /api/admin/curriculum/topics/:topicName/tag-mappings
 ```
 
 ### Description
-Returns tag-wise mappings for a specific topic using DeepSeek AI API. Only returns mappings with relevance score >= 60% (0.6). Compares all tags within the topic and identifies relationships (progression, prerequisite, related, etc.).
+Returns tag-wise mappings for a specific topic using DeepSeek AI API. Only returns mappings with relevance score >= 60% (0.6). 
+
+**Key Features:**
+- Splits learning outcome text into individual tags (by comma and newline)
+- Maps tags from lower classes to higher classes only (progression chain: Class 2 → Class 3 → Class 4 → Class 6, etc.)
+- Groups mappings by tag to show progression chains
+- Uses DeepSeek API to analyze semantic relationships between individual tags
 
 ### Authentication
 - **Required**: Yes
@@ -202,67 +322,184 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/curriculum/topics/Addi
 ```json
 {
   "success": true,
-  "topicName": "Addition",
-  "totalLearningOutcomes": 2,
-  "totalTags": 5,
+  "topicName": "Algebraic Expressions, Identities and Factorisation",
+  "totalLearningOutcomes": 3,
+  "totalTags": 3,
   "totalMappings": 3,
   "tagMappings": [
     {
       "fromTag": {
-        "tag": "Understanding addition (1–10)",
-        "learningOutcomeId": "6971d1424f0073675925cadf",
-        "learningOutcomeText": "Understanding addition (1–10), adding single-digit numbers (1–20), solving simple addition word problems",
-        "classLevel": 2,
-        "className": "Class 2"
+        "tag": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "learningOutcomeId": "69733c5b285ad1330ea3315a",
+        "learningOutcomeText": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "classLevel": 6,
+        "className": "Class 6"
       },
       "toTag": {
-        "tag": "adding two-digit numbers with carry (up to 99)",
-        "learningOutcomeId": "6971d19b4f0073675925cb01",
-        "learningOutcomeText": "adding two-digit numbers with carry (up to 99), adding three or more numbers",
-        "classLevel": 3,
-        "className": "Class 3"
+        "tag": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "learningOutcomeId": "69733c6d285ad1330ea33275",
+        "learningOutcomeText": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "classLevel": 7,
+        "className": "Class 7"
       },
       "relevanceScore": 0.85,
       "relation": "progression",
-      "reason": "Tag A covers foundational addition within 1-10, which is a direct prerequisite for Tag B, which extends the concept to two-digit numbers with carrying, representing a clear skill progression in arithmetic."
+      "reason": "Tag A focuses on foundational understanding of variables and creating basic algebraic expressions from real-world situations. Tag B builds on this foundation by requiring manipulation and simplification of algebraic expressions through addition, subtraction, and combining like terms, representing a clear progression from conceptual understanding to operational fluency."
     },
     {
       "fromTag": {
-        "tag": "adding single-digit numbers (1–20)",
-        "learningOutcomeId": "6971d1424f0073675925cadf",
-        "learningOutcomeText": "Understanding addition (1–10), adding single-digit numbers (1–20), solving simple addition word problems",
-        "classLevel": 2,
-        "className": "Class 2"
+        "tag": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "learningOutcomeId": "69733c5b285ad1330ea3315a",
+        "learningOutcomeText": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "classLevel": 6,
+        "className": "Class 6"
       },
       "toTag": {
-        "tag": "adding two-digit numbers with carry (up to 99)",
-        "learningOutcomeId": "6971d19b4f0073675925cb01",
-        "learningOutcomeText": "adding two-digit numbers with carry (up to 99), adding three or more numbers",
-        "classLevel": 3,
-        "className": "Class 3"
+        "tag": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "learningOutcomeId": "69733c7c285ad1330ea333b8",
+        "learningOutcomeText": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "classLevel": 8,
+        "className": "Class 8"
       },
-      "relevanceScore": 0.78,
+      "relevanceScore": 0.85,
       "relation": "progression",
-      "reason": "Single-digit addition (1-20) is a foundational skill that directly progresses to two-digit addition with carrying, representing a natural skill advancement."
+      "reason": "Tag A introduces foundational algebraic concepts (variables, expressions, basic modeling), while Tag B builds upon these with advanced operations (multiplication, expansion, identities, factorization) and problem-solving applications, representing a clear progression from basic algebraic understanding to more complex algebraic manipulation."
     },
     {
       "fromTag": {
-        "tag": "adding single-digit numbers (1–20)",
-        "learningOutcomeId": "6971d1424f0073675925cadf",
-        "learningOutcomeText": "Understanding addition (1–10), adding single-digit numbers (1–20), solving simple addition word problems",
-        "classLevel": 2,
-        "className": "Class 2"
+        "tag": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "learningOutcomeId": "69733c6d285ad1330ea33275",
+        "learningOutcomeText": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "classLevel": 7,
+        "className": "Class 7"
       },
       "toTag": {
-        "tag": "adding three or more numbers",
-        "learningOutcomeId": "6971d19b4f0073675925cb01",
-        "learningOutcomeText": "adding two-digit numbers with carry (up to 99), adding three or more numbers",
-        "classLevel": 3,
-        "className": "Class 3"
+        "tag": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "learningOutcomeId": "69733c7c285ad1330ea333b8",
+        "learningOutcomeText": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "classLevel": 8,
+        "className": "Class 8"
       },
-      "relevanceScore": 0.65,
+      "relevanceScore": 0.85,
       "relation": "progression",
-      "reason": "Adding single-digit numbers is a prerequisite skill for adding three or more numbers, representing a progression in complexity."
+      "reason": "Tag A focuses on basic algebraic operations (addition, subtraction, simplification) with like terms and simple expressions, while Tag B progresses to more advanced operations (multiplication, expansion, factorization) and applies algebraic identities to solve problems. Both deal with algebraic expressions but at different complexity levels - from fundamental operations to more sophisticated manipulation and application."
+    }
+  ]
+}
+```
+
+### Actual API Response Example
+
+**Request:**
+```bash
+GET /api/admin/curriculum/topics/Algebraic%20Expressions%2C%20Identities%20and%20Factorisation/tag-mappings?type=SUBJECT&subjectId=696f1e32570003266cdcf305
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "topicName": "Algebraic Expressions, Identities and Factorisation",
+  "totalLearningOutcomes": 3,
+  "totalTags": 3,
+  "totalMappings": 3,
+  "tagMappings": [
+    {
+      "fromTag": {
+        "tag": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "learningOutcomeId": "69733c5b285ad1330ea3315a",
+        "learningOutcomeText": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "classLevel": 6,
+        "className": "Class 6"
+      },
+      "toTag": {
+        "tag": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "learningOutcomeId": "69733c6d285ad1330ea33275",
+        "learningOutcomeText": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "classLevel": 7,
+        "className": "Class 7"
+      },
+      "relevanceScore": 0.85,
+      "relation": "progression",
+      "reason": "Tag A focuses on foundational understanding of variables and creating basic algebraic expressions from real-world situations. Tag B builds on this foundation by requiring manipulation and simplification of algebraic expressions through addition, subtraction, and combining like terms, representing a clear progression from conceptual understanding to operational fluency."
+    },
+    {
+      "fromTag": {
+        "tag": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "learningOutcomeId": "69733c5b285ad1330ea3315a",
+        "learningOutcomeText": "Uses variables to represent unknown quantities.\nUses variables with different operations to generalise given situations.\nWrites algebraic expressions for simple real-life situations such as finding the perimeter of a rectangle.",
+        "classLevel": 6,
+        "className": "Class 6"
+      },
+      "toTag": {
+        "tag": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "learningOutcomeId": "69733c7c285ad1330ea333b8",
+        "learningOutcomeText": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "classLevel": 8,
+        "className": "Class 8"
+      },
+      "relevanceScore": 0.85,
+      "relation": "progression",
+      "reason": "Tag A introduces foundational algebraic concepts (variables, expressions, basic modeling), while Tag B builds upon these with advanced operations (multiplication, expansion, identities, factorization) and problem-solving applications, representing a clear progression from basic algebraic understanding to more complex algebraic manipulation."
+    },
+    {
+      "fromTag": {
+        "tag": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "learningOutcomeId": "69733c6d285ad1330ea33275",
+        "learningOutcomeText": "Adds algebraic expressions involving like terms.\nSubtracts algebraic expressions involving like terms.\nSimplifies algebraic expressions using appropriate operations.\nRepresents simple situations using algebraic expressions.",
+        "classLevel": 7,
+        "className": "Class 7"
+      },
+      "toTag": {
+        "tag": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "learningOutcomeId": "69733c7c285ad1330ea333b8",
+        "learningOutcomeText": "Multiplies algebraic expressions.\nExpands algebraic expressions such as (2x − 5)(3x + 7).\nUses algebraic identities to simplify expressions.\nApplies algebraic identities to solve problems in daily life situations.\nFactorises algebraic expressions using suitable methods.\nUses factorisation to solve simple algebraic problems.",
+        "classLevel": 8,
+        "className": "Class 8"
+      },
+      "relevanceScore": 0.85,
+      "relation": "progression",
+      "reason": "Tag A focuses on basic algebraic operations (addition, subtraction, simplification) with like terms and simple expressions, while Tag B progresses to more advanced operations (multiplication, expansion, factorization) and applies algebraic identities to solve problems. Both deal with algebraic expressions but at different complexity levels - from fundamental operations to more sophisticated manipulation and application."
+    }
+  ]
+}
+```
+
+**Response Summary:**
+- **Topic:** Algebraic Expressions, Identities and Factorisation
+- **Total Learning Outcomes:** 3 (Class 6, 7, and 8)
+- **Total Tags:** Individual tags split from learning outcomes by comma and newline (e.g., "Adds algebraic expressions involving like terms" is one tag, "Subtracts algebraic expressions involving like terms" is another)
+- **Total Mappings Found:** Multiple mappings (all with relevance score >= 60%)
+- **Progression Chain:** Shows how each tag progresses from lower classes to higher classes (Class 6 → Class 7 → Class 8)
+- **Example Chain:** 
+  - "Uses variables to represent unknown quantities" (Class 6) 
+    → "Adds algebraic expressions involving like terms" (Class 7) 
+    → "Multiplies algebraic expressions" (Class 8)
+
+**Response Structure:**
+- `tagMappings`: Flat array of all tag-to-tag mappings (from lower class to higher class only)
+- `tagChains`: Grouped by source tag, showing all progressions from that tag to higher classes
+
+**Example Tag Chain Structure:**
+```json
+{
+  "tagChains": [
+    {
+      "tag": "Adds algebraic expressions involving like terms.",
+      "classLevel": 7,
+      "className": "Class 7",
+      "learningOutcomeId": "69733c6d285ad1330ea33275",
+      "progressions": [
+        {
+          "toTag": "Multiplies algebraic expressions.",
+          "toClassLevel": 8,
+          "toClassName": "Class 8",
+          "toLearningOutcomeId": "69733c7c285ad1330ea333b8",
+          "relevanceScore": 0.85,
+          "relation": "progression",
+          "reason": "Tag A focuses on basic algebraic operations..."
+        }
+      ]
     }
   ]
 }
@@ -288,6 +525,18 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/curriculum/topics/Addi
 | `tagMappings[].relevanceScore` | number | Relevance score (0.0 to 1.0, only >= 0.6) |
 | `tagMappings[].relation` | string | Type of relation: `same`, `progression`, `prerequisite`, `related`, `unrelated` |
 | `tagMappings[].reason` | string | Brief explanation of the relationship |
+| `tagChains` | array | Tag chains grouped by source tag showing progression paths |
+| `tagChains[].tag` | string | The source tag text |
+| `tagChains[].classLevel` | number | Class level of the source tag |
+| `tagChains[].className` | string | Class name of the source tag |
+| `tagChains[].learningOutcomeId` | string | Learning outcome ID containing this tag |
+| `tagChains[].progressions` | array | Array of progressions from this tag to higher classes |
+| `tagChains[].progressions[].toTag` | string | Target tag text |
+| `tagChains[].progressions[].toClassLevel` | number | Target class level |
+| `tagChains[].progressions[].toClassName` | string | Target class name |
+| `tagChains[].progressions[].relevanceScore` | number | Relevance score (>= 0.6) |
+| `tagChains[].progressions[].relation` | string | Relation type |
+| `tagChains[].progressions[].reason` | string | Explanation |
 
 ### Relation Types
 
@@ -302,10 +551,13 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/curriculum/topics/Addi
 ### Notes
 
 1. **Relevance Score Threshold**: Only mappings with `relevanceScore >= 0.6` (60%) are returned
-2. **Tag Extraction**: Tags are extracted from comma-separated text, preserving LaTeX/KaTeX expressions
-3. **AI Processing**: Uses DeepSeek AI API to analyze semantic relationships between tags
-4. **Sorting**: Mappings are sorted by relevance score (descending)
-5. **Performance**: This endpoint may take longer to respond as it makes multiple AI API calls
+2. **Tag Extraction**: Tags are extracted by splitting on both commas (`,`) and newlines (`\n`), preserving LaTeX/KaTeX expressions
+3. **Progression Chain**: Only maps from lower classes to higher classes (e.g., Class 2 → Class 3 → Class 4 → Class 6)
+4. **Individual Tag Mapping**: Each tag is mapped individually, not the entire learning outcome text
+5. **AI Processing**: Uses DeepSeek AI API to analyze semantic relationships between individual tags
+6. **Tag Chains**: Response includes both flat `tagMappings` array and grouped `tagChains` showing progression paths
+7. **Sorting**: Mappings are sorted by class level (ascending) then by relevance score (descending)
+8. **Performance**: This endpoint may take longer to respond as it makes multiple AI API calls (one per tag pair)
 
 ### Error Responses
 

@@ -9,7 +9,8 @@
     "calculate:mappings": "node calculate_all_learning_outcome_mappings.js",
     "test:learning-outcomes": "node test_learning_outcomes_api.js",
     "show:learning-outcomes": "node show_learning_outcomes_by_topic.js",
-    "test:api": "node test_api_response.js"
+    "test:api": "node test_api_response.js",
+    "test:topic-tag": "node test_topic_tag_api.js"
   },
   "keywords": [],
   "author": "",

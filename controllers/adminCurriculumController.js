@@ -376,58 +376,70 @@ const recalculateCurriculumMapping = async (req, res) => {
 // Handles LaTeX/KaTeX equations, fractions, polynomials, etc.
 const extractTags = (text) => {
     if (!text) return [];
-    // Split by comma, but preserve LaTeX/KaTeX expressions
-    // LaTeX expressions might contain commas, so we need to be careful
-    const tags = [];
-    let currentTag = '';
-    let inLatex = false;
-    let braceCount = 0;
     
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
+    // First, split by newlines (\n) - many learning outcomes use newlines to separate tags
+    const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+    
+    // Then split each line by comma, but preserve LaTeX/KaTeX expressions
+    const tags = [];
+    
+    lines.forEach(line => {
+        // Check if line contains LaTeX
+        const hasLatex = /[\\$]|\(|\)|\[|\]/.test(line);
         
-        // Check for LaTeX delimiters: \(, \), \[, \], $, $$
-        if (char === '\\' && (text[i + 1] === '(' || text[i + 1] === '[' || text[i + 1] === '{')) {
-            inLatex = true;
-            currentTag += char;
-            continue;
-        }
-        
-        if (char === '$' || (char === '\\' && (text[i + 1] === ')' || text[i + 1] === ']'))) {
-            inLatex = !inLatex;
-            currentTag += char;
-            continue;
-        }
-        
-        // Track braces for LaTeX expressions
-        if (char === '{') braceCount++;
-        if (char === '}') braceCount--;
-        
-        // If we're in LaTeX or inside braces, add to current tag
-        if (inLatex || braceCount > 0 || char !== ',') {
-            currentTag += char;
+        if (!hasLatex) {
+            // Simple case: split by comma
+            const commaTags = line.split(',').map(t => t.trim()).filter(Boolean);
+            tags.push(...commaTags);
         } else {
-            // Comma found and not in LaTeX - split here
+            // Complex case: handle LaTeX expressions
+            let currentTag = '';
+            let inLatex = false;
+            let braceCount = 0;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                // Check for LaTeX delimiters: \(, \), \[, \], $, $$
+                if (char === '\\' && (line[i + 1] === '(' || line[i + 1] === '[' || line[i + 1] === '{')) {
+                    inLatex = true;
+                    currentTag += char;
+                    continue;
+                }
+                
+                if (char === '$' || (char === '\\' && (line[i + 1] === ')' || line[i + 1] === ']'))) {
+                    inLatex = !inLatex;
+                    currentTag += char;
+                    continue;
+                }
+                
+                // Track braces for LaTeX expressions
+                if (char === '{') braceCount++;
+                if (char === '}') braceCount--;
+                
+                // If we're in LaTeX or inside braces, add to current tag
+                if (inLatex || braceCount > 0 || char !== ',') {
+                    currentTag += char;
+                } else {
+                    // Comma found and not in LaTeX - split here
+                    if (currentTag.trim()) {
+                        tags.push(currentTag.trim());
+                    }
+                    currentTag = '';
+                    inLatex = false;
+                    braceCount = 0;
+                }
+            }
+            
+            // Add the last tag from this line
             if (currentTag.trim()) {
                 tags.push(currentTag.trim());
             }
-            currentTag = '';
-            inLatex = false;
-            braceCount = 0;
         }
-    }
+    });
     
-    // Add the last tag
-    if (currentTag.trim()) {
-        tags.push(currentTag.trim());
-    }
-    
-    // Fallback to simple split if no LaTeX detected
-    if (tags.length === 0) {
-        return text.split(',').map(t => t.trim()).filter(Boolean);
-    }
-    
-    return tags.filter(Boolean);
+    // Remove duplicates and filter empty
+    return [...new Set(tags)].filter(Boolean);
 };
 
 // Helper function to normalize tags for better AI matching
@@ -800,13 +812,20 @@ const getTopicTagMappings = async (req, res) => {
             });
         });
 
-        // Compare each tag with every other tag in the topic
+        // Group tags by class level for progression mapping
+        // Only map from lower classes to higher classes (progression chain)
         const tagMappings = [];
         const processedPairs = new Set();
 
+        // Sort tags by class level
+        allTags.sort((a, b) => a.classLevel - b.classLevel);
+
+        // Compare each tag with tags from higher classes only (progression chain)
         for (let i = 0; i < allTags.length; i++) {
+            const tagA = allTags[i];
+            
+            // Only compare with tags from higher classes (progression)
             for (let j = i + 1; j < allTags.length; j++) {
-                const tagA = allTags[i];
                 const tagB = allTags[j];
 
                 // Skip if same learning outcome
@@ -814,11 +833,15 @@ const getTopicTagMappings = async (req, res) => {
                     continue;
                 }
 
+                // Only map from lower class to higher class (progression)
+                if (tagA.classLevel >= tagB.classLevel) {
+                    continue;
+                }
+
                 // Create unique pair key to avoid duplicates
-                const pairKey = `${tagA.tag}|||${tagB.tag}`;
-                const reversePairKey = `${tagB.tag}|||${tagA.tag}`;
+                const pairKey = `${tagA.tag}|||${tagB.tag}|||${tagA.classLevel}|||${tagB.classLevel}`;
                 
-                if (processedPairs.has(pairKey) || processedPairs.has(reversePairKey)) {
+                if (processedPairs.has(pairKey)) {
                     continue;
                 }
                 processedPairs.add(pairKey);
@@ -832,8 +855,12 @@ const getTopicTagMappings = async (req, res) => {
                         tagB.classLevel
                     );
 
-                    // Only include if relevance score >= 0.6 (60%)
-                    if (relevancy.relevancyScore >= 0.6) {
+                    // Only include if relevance score >= 0.6 (60%) and relation is progression/prerequisite/related
+                    if (relevancy.relevancyScore >= 0.6 && 
+                        (relevancy.relation === 'progression' || 
+                         relevancy.relation === 'prerequisite' || 
+                         relevancy.relation === 'related' ||
+                         relevancy.relation === 'same')) {
                         tagMappings.push({
                             fromTag: {
                                 tag: tagA.tag,
@@ -854,15 +881,50 @@ const getTopicTagMappings = async (req, res) => {
                             reason: relevancy.reason
                         });
                     }
+                    
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 200));
                 } catch (err) {
-                    console.error(`Error comparing tags ${tagA.tag} and ${tagB.tag}:`, err.message);
+                    console.error(`Error comparing tags ${tagA.tag.substring(0, 50)}... and ${tagB.tag.substring(0, 50)}...:`, err.message);
                     // Continue with next pair
                 }
             }
         }
 
-        // Sort by relevance score (descending)
-        tagMappings.sort((a, b) => b.relevanceScore - a.relevanceScore);
+        // Sort by class level (ascending) then by relevance score (descending)
+        tagMappings.sort((a, b) => {
+            if (a.fromTag.classLevel !== b.fromTag.classLevel) {
+                return a.fromTag.classLevel - b.fromTag.classLevel;
+            }
+            return b.relevanceScore - a.relevanceScore;
+        });
+
+        // Group mappings by tag to show chains
+        const tagChains = {};
+        tagMappings.forEach(mapping => {
+            const tagKey = mapping.fromTag.tag;
+            if (!tagChains[tagKey]) {
+                tagChains[tagKey] = {
+                    tag: tagKey,
+                    classLevel: mapping.fromTag.classLevel,
+                    className: mapping.fromTag.className,
+                    learningOutcomeId: mapping.fromTag.learningOutcomeId,
+                    progressions: []
+                };
+            }
+            tagChains[tagKey].progressions.push({
+                toTag: mapping.toTag.tag,
+                toClassLevel: mapping.toTag.classLevel,
+                toClassName: mapping.toTag.className,
+                toLearningOutcomeId: mapping.toTag.learningOutcomeId,
+                relevanceScore: mapping.relevanceScore,
+                relation: mapping.relation,
+                reason: mapping.reason
+            });
+        });
+
+        // Convert chains to array and sort by class level
+        const chains = Object.values(tagChains).sort((a, b) => a.classLevel - b.classLevel);
 
         res.json({
             success: true,
@@ -870,7 +932,8 @@ const getTopicTagMappings = async (req, res) => {
             totalLearningOutcomes: validOutcomes.length,
             totalTags: allTags.length,
             totalMappings: tagMappings.length,
-            tagMappings: tagMappings
+            tagMappings: tagMappings, // Flat list of all mappings
+            tagChains: chains // Grouped by tag showing progression chains
         });
 
     } catch (err) {
