@@ -1,12 +1,32 @@
 const nodemailer = require('nodemailer');
 
 // Create transporter with Gmail SMTP
+// Optimized for cloud platforms like Render
 const transporter = nodemailer.createTransport({
     service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // use STARTTLS instead of SSL
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
+    tls: {
+        rejectUnauthorized: false,
+        minVersion: 'TLSv1.2'
+    },
+    // Increased timeouts for Render/cloud platforms
+    connectionTimeout: 30000, // 30 seconds (increased from 10)
+    greetingTimeout: 30000,   // 30 seconds
+    socketTimeout: 30000,     // 30 seconds
+    // Pool connections for better reliability
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 3,
+    rateDelta: 1000,
+    rateLimit: 5,
+    debug: process.env.NODE_ENV === 'development', // enable debug in development only
+    logger: process.env.NODE_ENV === 'development' // log to console in development only
 });
 
 /**
@@ -60,17 +80,68 @@ The Academic Audit Team`;
         html: htmlContent,
     };
 
+    // Retry logic for Render/cloud platforms
+    const maxRetries = 3;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const info = await transporter.sendMail(mailOptions);
+            console.log(`Email sent successfully (attempt ${attempt}):`, info.messageId);
+            return { success: true, messageId: info.messageId };
+        } catch (error) {
+            lastError = error;
+            console.error(`Email send attempt ${attempt} failed:`, error.message);
+            
+            // Don't retry on authentication errors
+            if (error.code === 'EAUTH' || error.responseCode === 535) {
+                console.error('Authentication error - not retrying');
+                break;
+            }
+            
+            // Retry with exponential backoff
+            if (attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+                console.log(`Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    // All retries failed
+    console.error('Email send failed after all retries:', lastError.message);
+    console.error('Email error details:', {
+        code: lastError.code,
+        command: lastError.command,
+        response: lastError.response,
+        responseCode: lastError.responseCode
+    });
+    
+    // Return error instead of throwing - let the caller decide how to handle
+    return { 
+        success: false, 
+        error: lastError.message,
+        code: lastError.code,
+        responseCode: lastError.responseCode
+    };
+};
+
+/**
+ * Verify email transporter connection
+ */
+const verifyEmailConnection = async () => {
     try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent:', info.messageId);
-        return { success: true, messageId: info.messageId };
+        await transporter.verify();
+        console.log('✓ Email server is ready to send messages');
+        return { success: true };
     } catch (error) {
-        console.error('Error sending email:', error);
-        throw new Error('Failed to send email. Please try again later.');
+        console.error('✗ Email server connection error:', error);
+        return { success: false, error: error.message };
     }
 };
 
 module.exports = {
     generateOTP,
     sendOTPEmail,
+    verifyEmailConnection,
 };
