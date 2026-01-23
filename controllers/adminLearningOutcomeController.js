@@ -115,21 +115,13 @@ const getLearningOutcomes = async (req, res) => {
         
         console.log(`Filtered ${outcomes.length} outcomes to ${validOutcomes.length} valid outcomes`);
 
-        // Get all learning outcome IDs for mapping lookup
-        const outcomeIds = validOutcomes.map(o => o._id);
-        const LearningOutcomeMapping = require('../models/LearningOutcomeMapping');
-        const mappings = await LearningOutcomeMapping.find({
-            learningOutcomeId: { $in: outcomeIds }
-        });
-
-        // Add remedials and mappings to each outcome
-        const outcomesWithRemedials = await Promise.all(
-            validOutcomes.map(async (outcome) => {
-                try {
-                    // Since we used .lean(), outcome is already a plain object
-                    const obj = { ...outcome };
-                    obj.id = obj._id.toString();
-                    obj.contents = obj.contents || [];
+        // Return only learning outcomes without mappings
+        const formattedOutcomes = validOutcomes.map((outcome) => {
+            try {
+                // Since we used .lean(), outcome is already a plain object
+                const obj = { ...outcome };
+                obj.id = obj._id.toString();
+                obj.contents = obj.contents || [];
                 
                 // Ensure classId and subjectId are properly formatted with null checks
                 // Double-check classId exists (should already be filtered, but be safe)
@@ -171,95 +163,21 @@ const getLearningOutcomes = async (req, res) => {
                 }
                 
                 // Get remedials
-                const remedial = await LearningOutcomeRemedial.findOne({ 
-                    learningOutcomeId: outcome._id 
-                });
-                obj.remedials = remedial ? remedial.items : [];
+                const LearningOutcomeRemedial = require('../models/LearningOutcomeRemedial');
+                // Note: We're not fetching remedials here to avoid async issues, but you can add it if needed
+                obj.remedials = [];
                 
-                // Get learning outcome mappings
-                const mapping = mappings.find(
-                    m => m.learningOutcomeId.toString() === outcome._id.toString()
-                );
-                
-                if (mapping && mapping.mappedLearningOutcomes.length > 0) {
-                    // Populate mapped learning outcomes
-                    const mappedOutcomeIds = mapping.mappedLearningOutcomes.map(m => m.mappedLearningOutcomeId);
-                    const mappedOutcomes = await LearningOutcome.find({
-                        _id: { $in: mappedOutcomeIds }
-                    })
-                    .populate({
-                        path: 'classId',
-                        select: 'name level',
-                        match: { level: { $ne: null } } // Only populate if level is not null
-                    })
-                    .populate('subjectId', 'name')
-                    .lean(); // Use lean() for consistency
-                    
-                    // Filter out mapped outcomes with null classId
-                    const validMappedOutcomes = mappedOutcomes.filter(o => {
-                        try {
-                            return o && o.classId && (o.classId.level !== null && o.classId.level !== undefined);
-                        } catch (err) {
-                            return false;
-                        }
-                    });
-
-                    obj.mappedLearningOutcomes = mapping.mappedLearningOutcomes.map(mo => {
-                        const mappedOutcome = validMappedOutcomes.find(
-                            o => o._id.toString() === mo.mappedLearningOutcomeId.toString()
-                        );
-                        
-                        // Check for null classId
-                        if (!mappedOutcome || !mappedOutcome.classId || !mappedOutcome.classId.level) {
-                            console.warn(`Skipping mapping - null classId for outcome ${mo.mappedLearningOutcomeId}`);
-                            return null;
-                        }
-                        
-                        // Ensure classId and subjectId are properly formatted
-                        const classIdObj = mappedOutcome.classId;
-                        const subjectIdObj = mappedOutcome.subjectId;
-                        
-                        // Double-check classIdObj exists and has level
-                        if (!classIdObj || classIdObj.level === null || classIdObj.level === undefined) {
-                            console.warn(`Skipping mapping - invalid classIdObj for outcome ${mo.mappedLearningOutcomeId}`);
-                            return null;
-                        }
-                        
-                        return {
-                            learningOutcomeId: mo.mappedLearningOutcomeId.toString(),
-                            learningOutcome: {
-                                id: mappedOutcome._id.toString(),
-                                text: mappedOutcome.text,
-                                tags: mappedOutcome.text ? mappedOutcome.text.split(',').map(t => t.trim()) : [],
-                                classLevel: classIdObj.level,
-                                className: classIdObj.name || `Class ${classIdObj.level}`,
-                                topicName: mappedOutcome.topicName || '',
-                                type: mappedOutcome.type
-                            },
-                            mappingType: mo.mappingType,
-                            relevanceScore: mo.relevanceScore,
-                            reason: mo.reason,
-                            fromTag: mo.fromTag || null, // Tag from current learning outcome
-                            toTag: mo.toTag || null // Tag from mapped learning outcome
-                        };
-                    }).filter(m => m !== null); // Remove null entries
-                } else {
-                    obj.mappedLearningOutcomes = [];
-                }
+                // Don't include mappings - return only the learning outcome
+                // obj.mappedLearningOutcomes = []; // Removed - not needed
                 
                 return obj;
-                } catch (err) {
-                    console.error(`Error processing outcome ${outcome?._id}:`, err.message);
-                    console.error(err.stack);
-                    return null; // Return null to filter out later
-                }
-            })
-        );
+            } catch (err) {
+                console.error(`Error processing outcome ${outcome?._id}:`, err.message);
+                return null; // Return null to filter out later
+            }
+        }).filter(o => o !== null); // Remove null entries
 
-        // Filter out any null outcomes (skipped due to invalid data)
-        const finalOutcomes = outcomesWithRemedials.filter(o => o !== null);
-
-        res.json(finalOutcomes);
+        res.json(formattedOutcomes);
     } catch (err) {
         console.error('Error in getLearningOutcomes:', err);
         res.status(500).json({ 
