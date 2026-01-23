@@ -20,7 +20,8 @@ const {
 } = require('../controllers/userQuizController');
 const {
     getUserProfile,
-    getTopicsForClass
+    getTopicsForClass,
+    getTopicTagsWithConcepts
 } = require('../controllers/userProfileController');
 
 // Public routes - Registration flow
@@ -42,6 +43,7 @@ router.get('/concepts-with-tags/:classLevel', getConceptsWithTags);
 
 // Protected routes - Profile Management
 router.get('/profile', protect, getUserProfile);
+router.get('/classes/:classLevel/topics/:topicName', protect, getTopicTagsWithConcepts); // Must be before the general topics route
 router.get('/classes/:classLevel/topics', protect, getTopicsForClass);
 
 // Protected routes - Quiz Management
