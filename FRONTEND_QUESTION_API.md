@@ -206,18 +206,46 @@ const getQuestions = async (filters = {}, pagination = {}) => {
 };
 
 // Usage examples
-// Get all pending questions
-const pendingQuestions = await getQuestions({ status: 'pending' });
 
-// Get questions for a specific tag and class
-const tagQuestions = await getQuestions({
+// 1. Get ALL questions (no status filter)
+const allQuestions = await getQuestions({}, { limit: 50, skip: 0 });
+
+// 2. Get only APPROVED questions
+const approvedQuestions = await getQuestions({ 
+  status: 'approved' 
+});
+
+// 3. Get only PENDING questions (awaiting approval)
+const pendingQuestions = await getQuestions({ 
+  status: 'pending' 
+});
+
+// 4. Get only REJECTED questions
+const rejectedQuestions = await getQuestions({ 
+  status: 'rejected' 
+});
+
+// 5. Get approved questions for a specific topic
+const approvedTopicQuestions = await getQuestions({
+  topicName: 'Addition',
+  status: 'approved'
+});
+
+// 6. Get pending questions for a specific tag and class
+const pendingTagQuestions = await getQuestions({
   tag: 'Adds two- and three-digit numbers',
   classLevel: 3,
   status: 'pending'
 }, { limit: 100, skip: 0 });
 
-// Get approved questions for a topic
-const approvedQuestions = await getQuestions({
+// 7. Get all questions for a class (all statuses)
+const classQuestions = await getQuestions({
+  classLevel: 3
+});
+
+// 8. Get approved questions for a specific class and topic
+const approvedClassTopicQuestions = await getQuestions({
+  classLevel: 3,
   topicName: 'Addition',
   status: 'approved'
 });

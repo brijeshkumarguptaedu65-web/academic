@@ -49,7 +49,25 @@ async function callAzureOpenAI(messages, azureConfig, temperature = 0.3, maxToke
     }
 }
 
-// Verify mathematical answer
+// Normalize number strings for comparison
+function normalizeNumber(str) {
+    if (!str) return '';
+    // Remove LaTeX markers, dollar signs, spaces
+    let normalized = String(str).trim()
+        .replace(/^\$+|\$+$/g, '')
+        .replace(/\\+/g, '')
+        .replace(/\s+/g, '')
+        .toLowerCase();
+    // Remove trailing zeros and decimal point if whole number
+    if (normalized.includes('.')) {
+        normalized = normalized.replace(/\.?0+$/, '');
+    }
+    // Remove commas (thousand separators)
+    normalized = normalized.replace(/,/g, '');
+    return normalized;
+}
+
+// Verify mathematical answer - STRICT verification
 function verifyMathematicalAnswer(question) {
     if (!question.finalAnswer) {
         return { isValid: false, error: 'Missing finalAnswer field' };
@@ -59,17 +77,22 @@ function verifyMathematicalAnswer(question) {
         correctIndex < 0 || correctIndex >= question.options.length) {
         return { isValid: false, error: `Invalid correctAnswer index: ${correctIndex}` };
     }
-    const finalAnswer = String(question.finalAnswer).trim();
-    const selectedOption = String(question.options[correctIndex]).trim();
-    const cleanFinal = finalAnswer.replace(/^\$+|\$+$/g, '').replace(/\\+/g, '').trim();
-    const cleanSelected = selectedOption.replace(/^\$+|\$+$/g, '').replace(/\\+/g, '').trim();
-    const isMatch = cleanSelected.includes(cleanFinal) || 
-                  cleanFinal.includes(cleanSelected) ||
-                  cleanSelected === cleanFinal;
-    if (!isMatch) {
+    if (!Array.isArray(question.options) || question.options.length !== 4) {
+        return { isValid: false, error: 'Must have exactly 4 options' };
+    }
+    // Check for duplicate options
+    const normalizedOptions = question.options.map(opt => normalizeNumber(opt));
+    const uniqueOptions = new Set(normalizedOptions);
+    if (uniqueOptions.size !== normalizedOptions.length) {
+        return { isValid: false, error: 'Duplicate options found in question' };
+    }
+    const finalAnswer = normalizeNumber(question.finalAnswer);
+    const correctOption = normalizeNumber(question.options[correctIndex]);
+    // STRICT matching - must be exact match (after normalization)
+    if (finalAnswer !== correctOption) {
         return {
             isValid: false,
-            error: `Answer mismatch: finalAnswer="${cleanFinal}" vs option[${correctIndex}]="${cleanSelected}"`
+            error: `Answer mismatch: finalAnswer="${finalAnswer}" vs option[${correctIndex}]="${correctOption}"`
         };
     }
     return { isValid: true };
@@ -79,32 +102,43 @@ function verifyMathematicalAnswer(question) {
 async function verifyAndCorrectQuestionsBatch(questions, azureConfig) {
     try {
         const verificationPrompt = `You are a STRICT mathematics verification expert. Verify these ${questions.length} MCQ questions.
+
 CRITICAL RULES - FOLLOW EXACTLY:
-1. For EACH question, solve it step-by-step and calculate the CORRECT answer
-2. Check if your calculated answer EXISTS in the options array
-3. If calculated answer is NOT in options → question is INVALID (reject it)
-4. If calculated answer IS in options → verify correctAnswer index points to it
-5. If correct answer is missing from options → you MUST provide a FULL corrected question with ALL 4 options including the correct answer
+1. For EACH question, solve it step-by-step and calculate the EXACT CORRECT answer
+2. Normalize your calculated answer (remove spaces, commas, trailing zeros, LaTeX markers)
+3. Check if your calculated answer EXISTS EXACTLY in the options array (after normalization)
+4. If calculated answer is NOT in options → question is INVALID (reject it, set isCorrect: false)
+5. If calculated answer IS in options → verify correctAnswer index points to it EXACTLY
+6. If correctAnswer index is WRONG → you MUST provide a FULL corrected question with ALL 4 options and correct correctAnswer index
+7. ALL options must be UNIQUE - if duplicates exist, mark as INVALID
+8. finalAnswer MUST match options[correctAnswer] EXACTLY (after normalization)
+
+IMPORTANT:
+- Compare answers after normalization (remove spaces, commas, trailing zeros, $ signs)
+- Example: "1,234" = "1234" = "1234.0" = "1234.00" (all same)
+- Example: "1/2" = "0.5" = ".5" (all same)
+- Be STRICT - if answer doesn't match exactly, reject the question
+
 Return ONLY a JSON object:
 {
   "results": [
     {
       "index": 0,
       "isCorrect": true/false,
-      "calculatedAnswer": "the exact answer you calculated",
+      "calculatedAnswer": "the exact normalized answer you calculated",
       "correctedQuestion": { 
         "id": number,
         "question": string,
-        "options": [string, string, string, string],
-        "correctAnswer": number,
-        "finalAnswer": string,
+        "options": [string, string, string, string],  // ALL 4 options, NO duplicates
+        "correctAnswer": number,  // Index where calculated answer is located
+        "finalAnswer": string,    // Must match options[correctAnswer] exactly
         "difficulty": string,
         "topicName": string,
         "concept": string,
         "tag": string,
         "latex": boolean
       },
-      "reason": "why invalid"
+      "reason": "why invalid (if isCorrect: false)"
     }
   ]
 }
@@ -114,7 +148,7 @@ ${JSON.stringify(questions, null, 2)}`;
             [
                 {
                     role: "system",
-                    content: "You are a strict mathematics verification expert. You MUST: (1) Solve each problem step-by-step, (2) Calculate the correct answer, (3) Verify the correct answer EXISTS in the options, (4) If correct answer is missing from options → mark as INVALID, (5) If correct answer exists but at wrong index → provide FULL corrected question with all 4 options and correct correctAnswer index. NEVER accept a question where the mathematically correct answer is not in the options. Return only valid JSON."
+                    content: "You are a strict mathematics verification expert. You MUST: (1) Solve each problem step-by-step, (2) Calculate the EXACT correct answer, (3) Normalize the answer (remove spaces, commas, trailing zeros), (4) Verify the normalized correct answer EXISTS EXACTLY in the options array, (5) If correct answer is missing from options → mark as INVALID (isCorrect: false), (6) If correct answer exists but at wrong index → provide FULL corrected question with all 4 unique options and correct correctAnswer index, (7) Ensure finalAnswer matches options[correctAnswer] exactly after normalization. NEVER accept a question where the mathematically correct answer is not in the options. Return only valid JSON."
                 },
                 { role: "user", content: verificationPrompt }
             ],
@@ -188,8 +222,20 @@ const generateQuestions = async (req, res) => {
         if (!classData) {
             return res.status(404).json({ success: false, message: `Class ${classLevel} not found` });
         }
-        const existingQuestions = await Question.find({ tag, classLevel, topicName }).select('question').lean();
-        const existingQuestionTexts = existingQuestions.map(q => q.question.toLowerCase().trim());
+        // Get ALL existing questions for this tag+class+topic to prevent duplicates
+        const existingQuestions = await Question.find({ 
+            tag, 
+            classLevel, 
+            topicName 
+        }).select('question').lean();
+        // Normalize existing questions for better duplicate detection
+        const existingQuestionTexts = existingQuestions.map(q => {
+            const normalized = q.question.toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/[.,!?;:]/g, '')
+                .trim();
+            return normalized;
+        });
         const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const prompt = `Generate exactly 10 MCQ questions for Class ${classLevel} mathematics.
 TAG: "${tag}"
@@ -264,17 +310,40 @@ Return ONLY the JSON - no explanations, no preamble.`;
         if (!Array.isArray(questionsArray) || questionsArray.length === 0) {
             return res.status(400).json({ success: false, message: 'No questions generated by AI' });
         }
+        // Filter and validate questions
         const structuredQuestions = questionsArray.filter((q, idx) => {
+            // Basic structure validation
             if (!q || !q.question || !Array.isArray(q.options) || q.options.length !== 4) {
+                console.log(`Question ${idx}: Invalid structure`);
                 return false;
             }
-            const options = q.options.map(opt => String(opt).trim().toLowerCase());
-            const uniqueOptions = new Set(options);
-            if (uniqueOptions.size !== options.length) {
+            // Check for duplicate options (normalized)
+            const normalizedOptions = q.options.map(opt => normalizeNumber(String(opt)));
+            const uniqueOptions = new Set(normalizedOptions);
+            if (uniqueOptions.size !== normalizedOptions.length) {
+                console.log(`Question ${idx}: Duplicate options detected`);
                 return false;
             }
-            const questionText = String(q.question).trim().toLowerCase();
+            // Normalize question text for duplicate detection
+            const questionText = String(q.question)
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/[.,!?;:]/g, '')
+                .trim();
+            // Check against existing questions
             if (existingQuestionTexts.includes(questionText)) {
+                console.log(`Question ${idx}: Duplicate question detected`);
+                return false;
+            }
+            // Validate correctAnswer index
+            if (typeof q.correctAnswer !== 'number' || 
+                q.correctAnswer < 0 || q.correctAnswer >= q.options.length) {
+                console.log(`Question ${idx}: Invalid correctAnswer index`);
+                return false;
+            }
+            // Validate finalAnswer exists
+            if (!q.finalAnswer) {
+                console.log(`Question ${idx}: Missing finalAnswer`);
                 return false;
             }
             return true;
@@ -282,9 +351,18 @@ Return ONLY the JSON - no explanations, no preamble.`;
         if (structuredQuestions.length === 0) {
             return res.status(400).json({ success: false, message: 'No valid questions after filtering' });
         }
+        // Verify answers using AI + client-side validation
         const verificationResult = await verifyAndCorrectQuestionsBatch(structuredQuestions, azureConfig);
         const questionsToSave = [];
+        
+        // Process valid questions - double-check each one
         verificationResult.valid.forEach((q) => {
+            // Re-verify answer before saving
+            const answerCheck = verifyMathematicalAnswer(q);
+            if (!answerCheck.isValid) {
+                console.log(`Valid question failed re-verification: ${answerCheck.error}`);
+                return; // Skip this question
+            }
             const questionData = {
                 question: String(q.question),
                 options: q.options.map(opt => String(opt)),
@@ -307,7 +385,15 @@ Return ONLY the JSON - no explanations, no preamble.`;
             }
             questionsToSave.push(questionData);
         });
+        // Process corrected questions - verify each correction
         verificationResult.corrected.forEach((q) => {
+            // Verify the corrected answer
+            const answerCheck = verifyMathematicalAnswer(q);
+            if (!answerCheck.isValid) {
+                console.log(`Corrected question failed verification: ${answerCheck.error}`);
+                return; // Skip this question
+            }
+            
             const questionData = {
                 question: String(q.question),
                 options: q.options.map(opt => String(opt)),
@@ -330,21 +416,89 @@ Return ONLY the JSON - no explanations, no preamble.`;
             }
             questionsToSave.push(questionData);
         });
+        // Final duplicate check - check DB before saving each question
         const finalQuestions = [];
         for (const q of questionsToSave) {
+            // Normalize question for comparison
+            const normalizedQuestion = q.question
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .replace(/[.,!?;:]/g, '')
+                .trim();
+            
+            // Check for exact duplicate (case-insensitive, normalized)
             const existing = await Question.findOne({
-                question: { $regex: new RegExp(q.question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-                classLevel: q.classLevel,
-                tag: q.tag
+                $or: [
+                    // Exact match (case-insensitive)
+                    { 
+                        question: { $regex: new RegExp(`^${q.question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                        classLevel: q.classLevel,
+                        tag: q.tag
+                    },
+                    // Normalized match
+                    {
+                        question: { 
+                            $regex: new RegExp(`^${normalizedQuestion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') 
+                        },
+                        classLevel: q.classLevel,
+                        tag: q.tag
+                    }
+                ]
             });
+            
             if (!existing) {
-                finalQuestions.push(q);
+                // Double-check answer correctness before adding
+                const answerCheck = verifyMathematicalAnswer(q);
+                if (answerCheck.isValid) {
+                    finalQuestions.push(q);
+                } else {
+                    console.log(`Skipping question due to answer verification failure: ${answerCheck.error}`);
+                }
+            } else {
+                console.log(`Skipping duplicate question: "${q.question.substring(0, 50)}..."`);
             }
         }
         if (finalQuestions.length === 0) {
-            return res.status(400).json({ success: false, message: 'All generated questions are duplicates' });
+            return res.status(400).json({ 
+                success: false, 
+                message: 'All generated questions are duplicates or failed validation' 
+            });
         }
-        const savedQuestions = await Question.insertMany(finalQuestions, { ordered: false });
+        
+        // Insert questions with duplicate error handling
+        let savedQuestions = [];
+        try {
+            savedQuestions = await Question.insertMany(finalQuestions, { ordered: false });
+        } catch (insertError) {
+            // Handle duplicate key errors (from unique index)
+            if (insertError.code === 11000 || insertError.name === 'BulkWriteError' || insertError.writeErrors) {
+                // Extract successfully inserted questions from writeErrors
+                const writeErrors = insertError.writeErrors || [];
+                const errorIndexes = new Set(writeErrors.map(err => err.index));
+                
+                // Filter out questions that failed (duplicates)
+                const successfullyInserted = finalQuestions.filter((q, idx) => !errorIndexes.has(idx));
+                
+                if (successfullyInserted.length === 0) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: 'All questions are duplicates (unique constraint violation)' 
+                    });
+                }
+                
+                // Fetch the successfully inserted questions from DB
+                const questionTexts = successfullyInserted.map(q => q.question);
+                savedQuestions = await Question.find({
+                    question: { $in: questionTexts },
+                    classLevel: classLevel,
+                    tag: tag
+                }).limit(successfullyInserted.length);
+                
+                console.log(`Inserted ${savedQuestions.length} out of ${finalQuestions.length} questions (${finalQuestions.length - savedQuestions.length} were duplicates)`);
+            } else {
+                throw insertError;
+            }
+        }
         res.status(201).json({
             success: true,
             message: `Generated ${savedQuestions.length} questions`,
@@ -484,11 +638,83 @@ const bulkRejectQuestions = async (req, res) => {
     }
 };
 
+const deleteQuestion = async (req, res) => {
+    try {
+        const { questionId } = req.params;
+        const question = await Question.findById(questionId);
+        if (!question) {
+            return res.status(404).json({ success: false, message: 'Question not found' });
+        }
+        await Question.findByIdAndDelete(questionId);
+        res.json({ success: true, message: 'Question deleted successfully' });
+    } catch (error) {
+        console.error('Delete question error:', error);
+        res.status(500).json({ success: false, message: 'Error deleting question', error: error.message });
+    }
+};
+
+const bulkDeleteQuestions = async (req, res) => {
+    try {
+        const { questionIds } = req.body;
+        if (!Array.isArray(questionIds) || questionIds.length === 0) {
+            return res.status(400).json({ success: false, message: 'questionIds array is required' });
+        }
+        const result = await Question.deleteMany({ _id: { $in: questionIds } });
+        res.json({ 
+            success: true, 
+            message: `Deleted ${result.deletedCount} questions`, 
+            data: { deleted: result.deletedCount, total: questionIds.length } 
+        });
+    } catch (error) {
+        console.error('Bulk delete questions error:', error);
+        res.status(500).json({ success: false, message: 'Error bulk deleting questions', error: error.message });
+    }
+};
+
+const deleteAllQuestionsByFilter = async (req, res) => {
+    try {
+        const { tag, classLevel, topicName, status, type, subjectId } = req.body;
+        const query = {};
+        if (tag) query.tag = tag;
+        if (classLevel) query.classLevel = parseInt(classLevel);
+        if (topicName) query.topicName = topicName;
+        if (status) query.status = status;
+        if (type) query.type = type;
+        if (subjectId) query.subjectId = subjectId;
+        
+        // Prevent accidental deletion of all questions
+        if (Object.keys(query).length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'At least one filter parameter is required to prevent accidental deletion of all questions' 
+            });
+        }
+        
+        const count = await Question.countDocuments(query);
+        if (count === 0) {
+            return res.status(404).json({ success: false, message: 'No questions found matching the criteria' });
+        }
+        
+        const result = await Question.deleteMany(query);
+        res.json({ 
+            success: true, 
+            message: `Deleted ${result.deletedCount} questions`, 
+            data: { deleted: result.deletedCount, filters: query } 
+        });
+    } catch (error) {
+        console.error('Delete questions by filter error:', error);
+        res.status(500).json({ success: false, message: 'Error deleting questions', error: error.message });
+    }
+};
+
 module.exports = {
     generateQuestions,
     getAllQuestions,
     approveQuestion,
     rejectQuestion,
     bulkApproveQuestions,
-    bulkRejectQuestions
+    bulkRejectQuestions,
+    deleteQuestion,
+    bulkDeleteQuestions,
+    deleteAllQuestionsByFilter
 };

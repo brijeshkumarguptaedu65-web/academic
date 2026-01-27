@@ -84,7 +84,10 @@ const {
     approveQuestion,
     rejectQuestion,
     bulkApproveQuestions,
-    bulkRejectQuestions
+    bulkRejectQuestions,
+    deleteQuestion,
+    bulkDeleteQuestions,
+    deleteAllQuestionsByFilter
 } = require('../controllers/adminQuestionController');
 
 // All routes protected + admin only
@@ -184,5 +187,8 @@ router.put('/questions/:questionId/approve', approveQuestion); // Approve a sing
 router.put('/questions/:questionId/reject', rejectQuestion); // Reject a single question
 router.put('/questions/bulk-approve', bulkApproveQuestions); // Bulk approve questions
 router.put('/questions/bulk-reject', bulkRejectQuestions); // Bulk reject questions
+router.delete('/questions/:questionId', deleteQuestion); // Delete a single question
+router.delete('/questions/bulk-delete', bulkDeleteQuestions); // Bulk delete questions by IDs
+router.delete('/questions/delete-by-filter', deleteAllQuestionsByFilter); // Delete questions by filters
 
 module.exports = router;
