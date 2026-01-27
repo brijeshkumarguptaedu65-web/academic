@@ -78,6 +78,15 @@ const {
     syncAllTopicTagMappings
 } = require('../controllers/adminCurriculumController');
 
+const {
+    generateQuestions,
+    getAllQuestions,
+    approveQuestion,
+    rejectQuestion,
+    bulkApproveQuestions,
+    bulkRejectQuestions
+} = require('../controllers/adminQuestionController');
+
 // All routes protected + admin only
 router.use(protect, admin);
 
@@ -167,5 +176,13 @@ router.post('/curriculum/sync-concept-graphs', syncAllConceptGraphs); // Sync al
 
 // 2.10.4 Topic Tag Mappings Sync (AI-powered, stored in DB)
 router.post('/curriculum/sync-topic-tag-mappings', syncAllTopicTagMappings); // Sync all topic tag mappings
+
+// 2.11 Question Management (AI-powered generation with admin approval)
+router.post('/questions/generate', generateQuestions); // Generate questions for a tag
+router.get('/questions', getAllQuestions); // Get all questions with filters
+router.put('/questions/:questionId/approve', approveQuestion); // Approve a single question
+router.put('/questions/:questionId/reject', rejectQuestion); // Reject a single question
+router.put('/questions/bulk-approve', bulkApproveQuestions); // Bulk approve questions
+router.put('/questions/bulk-reject', bulkRejectQuestions); // Bulk reject questions
 
 module.exports = router;
