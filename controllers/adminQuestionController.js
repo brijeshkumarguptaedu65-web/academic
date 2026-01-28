@@ -1764,7 +1764,7 @@ const deleteAllQuestions = async (req, res) => {
 // API 1: Get questions by tag and class
 const getQuestionsByTagAndClass = async (req, res) => {
     try {
-        const { tag, classLevel } = req.query;
+        let { tag, classLevel } = req.query;
         
         if (!tag || !classLevel) {
             return res.status(400).json({ 
@@ -1773,24 +1773,126 @@ const getQuestionsByTagAndClass = async (req, res) => {
             });
         }
         
-        const query = {
-            tag: tag,
-            classLevel: parseInt(classLevel),
-            status: 'approved' // Only return approved questions
+        // Decode URL-encoded tag (handles + signs, %20, etc.)
+        tag = decodeURIComponent(tag);
+        
+        // Trim whitespace
+        tag = tag.trim();
+        
+        const classLevelInt = parseInt(classLevel);
+        
+        // Determine if user is admin (check req.user.role or req.route.path)
+        const isAdmin = req.user && req.user.role === 'admin';
+        
+        // Build base query
+        const baseQuery = {
+            classLevel: classLevelInt
         };
         
-        const questions = await Question.find(query)
+        // First, try exact tag match
+        let tagQuery = { tag: tag };
+        
+        // If no exact match, try case-insensitive regex match
+        let questions = await Question.find({
+            ...baseQuery,
+            ...tagQuery
+        })
+        .select('-approvedBy -rejectedBy -rejectedAt -rejectionReason -generationBatch')
+        .sort({ createdAt: -1 })
+        .lean();
+        
+        // If no exact match found, try case-insensitive match
+        if (questions.length === 0) {
+            tagQuery = {
+                tag: { $regex: new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            };
+            
+            questions = await Question.find({
+                ...baseQuery,
+                ...tagQuery
+            })
             .select('-approvedBy -rejectedBy -rejectedAt -rejectionReason -generationBatch')
             .sort({ createdAt: -1 })
             .lean();
+        }
+        
+        // Filter by status: Admin can see all, User only approved
+        if (!isAdmin) {
+            questions = questions.filter(q => q.status === 'approved');
+        }
+        
+        // Debug: Log what we're searching for and what we found
+        if (questions.length === 0) {
+            // Check if questions exist with different status
+            const allQuestionsCount = await Question.countDocuments({
+                ...baseQuery,
+                tag: { $regex: new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            });
+            
+            // Check status breakdown
+            const statusBreakdown = {
+                approved: await Question.countDocuments({
+                    ...baseQuery,
+                    tag: { $regex: new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                    status: 'approved'
+                }),
+                pending: await Question.countDocuments({
+                    ...baseQuery,
+                    tag: { $regex: new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                    status: 'pending'
+                }),
+                rejected: await Question.countDocuments({
+                    ...baseQuery,
+                    tag: { $regex: new RegExp(`^${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+                    status: 'rejected'
+                })
+            };
+            
+            // Check if questions exist for this class (any tag)
+            const classQuestionsCount = await Question.countDocuments({
+                classLevel: classLevelInt
+            });
+            
+            // Get sample tags for this class to help debug
+            const sampleTags = await Question.distinct('tag', {
+                classLevel: classLevelInt
+            });
+            
+            console.log(`[DEBUG] Tag search: "${tag}"`);
+            console.log(`[DEBUG] Class Level: ${classLevelInt}`);
+            console.log(`[DEBUG] Is Admin: ${isAdmin}`);
+            console.log(`[DEBUG] Questions found (any status): ${allQuestionsCount}`);
+            console.log(`[DEBUG] Status breakdown:`, statusBreakdown);
+            console.log(`[DEBUG] Total questions for class: ${classQuestionsCount}`);
+            console.log(`[DEBUG] Sample tags for class ${classLevelInt}:`, sampleTags.slice(0, 10));
+            
+            // If questions exist but not approved, inform admin
+            if (isAdmin && allQuestionsCount > 0) {
+                return res.json({
+                    success: true,
+                    data: {
+                        questions: [],
+                        count: 0,
+                        tag: tag,
+                        classLevel: classLevelInt,
+                        message: `Found ${allQuestionsCount} questions but none are approved. Status breakdown: ${JSON.stringify(statusBreakdown)}`,
+                        debug: {
+                            totalFound: allQuestionsCount,
+                            statusBreakdown: statusBreakdown,
+                            sampleTags: sampleTags.slice(0, 10)
+                        }
+                    }
+                });
+            }
+        }
         
         res.json({
             success: true,
             data: {
                 questions,
                 count: questions.length,
-                tag,
-                classLevel: parseInt(classLevel)
+                tag: tag, // Return the decoded tag
+                classLevel: classLevelInt
             }
         });
     } catch (error) {
