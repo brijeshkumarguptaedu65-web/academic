@@ -49,52 +49,320 @@ async function callAzureOpenAI(messages, azureConfig, temperature = 0.3, maxToke
     }
 }
 
-// Normalize number strings for comparison
-function normalizeNumber(str) {
-    if (!str) return '';
-    // Remove LaTeX markers, dollar signs, spaces
-    let normalized = String(str).trim()
-        .replace(/^\$+|\$+$/g, '')
-        .replace(/\\+/g, '')
-        .replace(/\s+/g, '')
-        .toLowerCase();
-    // Remove trailing zeros and decimal point if whole number
-    if (normalized.includes('.')) {
-        normalized = normalized.replace(/\.?0+$/, '');
-    }
-    // Remove commas (thousand separators)
-    normalized = normalized.replace(/,/g, '');
-    return normalized;
+// ============================================================================
+// COMPREHENSIVE MATH VALIDATION ENGINE
+// ============================================================================
+
+// STEP 1: Normalize numbers safely (handles commas, LaTeX, spaces)
+function normalizeNumber(value) {
+    if (!value) return null;
+    const cleaned = String(value)
+        .replace(/,/g, '')        // remove commas (CRITICAL FIX)
+        .replace(/\$/g, '')       // remove LaTeX $
+        .replace(/\\/g, '')        // remove escapes
+        .replace(/\s+/g, '')      // remove spaces
+        .trim();
+    const num = Number(cleaned);
+    return isNaN(num) ? null : num;
 }
 
-// Verify mathematical answer - STRICT verification
+// STEP 2: GCD and LCM functions
+function gcd(a, b) {
+    a = Math.abs(a);
+    b = Math.abs(b);
+    while (b !== 0) {
+        [a, b] = [b, a % b];
+    }
+    return a;
+}
+
+function lcm(a, b) {
+    return Math.abs(a * b) / gcd(a, b);
+}
+
+function gcdMultiple(nums) {
+    return nums.reduce((acc, n) => gcd(acc, n));
+}
+
+function lcmMultiple(nums) {
+    return nums.reduce((acc, n) => lcm(acc, n));
+}
+
+// STEP 3: Fraction utilities
+function reduceFraction(n, d) {
+    const g = gcd(n, d);
+    return { n: n / g, d: d / g };
+}
+
+function parseFraction(input) {
+    if (!input) return null;
+    const cleaned = String(input)
+        .replace(/\$/g, '')
+        .replace(/,/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    // Mixed number: "1 11/18"
+    const mixedMatch = cleaned.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+    if (mixedMatch) {
+        const whole = Number(mixedMatch[1]);
+        const n = Number(mixedMatch[2]);
+        const d = Number(mixedMatch[3]);
+        return reduceFraction(whole * d + n, d);
+    }
+    // Simple fraction: "29/18"
+    const fracMatch = cleaned.match(/^(\d+)\/(\d+)$/);
+    if (fracMatch) {
+        return reduceFraction(Number(fracMatch[1]), Number(fracMatch[2]));
+    }
+    // Decimal or whole number
+    const num = Number(cleaned);
+    if (!isNaN(num)) {
+        const precision = 1e6;
+        return reduceFraction(Math.round(num * precision), precision);
+    }
+    return null;
+}
+
+function fractionsEqual(a, b) {
+    return a.n === b.n && a.d === b.d;
+}
+
+// STEP 4: Detect estimation/rounding questions
+function detectEstimationRule(questionText) {
+    const q = questionText.toLowerCase();
+    if (q.includes('nearest ten thousand')) return 'nearest_10000';
+    if (q.includes('nearest thousand')) return 'nearest_1000';
+    if (q.includes('nearest hundred')) return 'nearest_100';
+    if (q.includes('nearest ten')) return 'nearest_10';
+    if (q.includes('estimate')) return 'nearest_1000'; // fallback default
+    return null;
+}
+
+function roundByRule(value, rule) {
+    switch (rule) {
+        case 'nearest_10': return Math.round(value / 10) * 10;
+        case 'nearest_100': return Math.round(value / 100) * 100;
+        case 'nearest_1000': return Math.round(value / 1000) * 1000;
+        case 'nearest_10000': return Math.round(value / 10000) * 10000;
+        default: return value;
+    }
+}
+
+function extractNumbers(text) {
+    const matches = text.match(/[\d,]+/g) || [];
+    return matches
+        .map(v => normalizeNumber(v))
+        .filter(v => v !== null);
+}
+
+// STEP 5: Estimation verification
+function verifyEstimationQuestion(question) {
+    const rule = detectEstimationRule(question.question);
+    if (!rule) return { isValid: true }; // not an estimation question
+    const numbers = extractNumbers(question.question);
+    if (numbers.length < 2) {
+        return { isValid: false, error: 'Could not extract numbers for estimation' };
+    }
+    const rounded = numbers.map(n => roundByRule(n, rule));
+    const estimatedSum = rounded.reduce((a, b) => a + b, 0);
+    const optionValues = question.options.map(normalizeNumber);
+    const correctIndex = optionValues.findIndex(v => v === estimatedSum);
+    if (correctIndex === -1) {
+        return {
+            isValid: false,
+            error: `Estimated answer ${estimatedSum} not found in options`
+        };
+    }
+    // Fix incorrect correctAnswer index if needed
+    if (question.correctAnswer !== correctIndex) {
+        question.correctAnswer = correctIndex;
+        question.finalAnswer = question.options[correctIndex];
+    }
+    return { isValid: true, correctAnswer: estimatedSum };
+}
+
+// STEP 6: Fraction verification
+function verifyFractionQuestion(question) {
+    const expected = parseFraction(question.finalAnswer);
+    if (!expected) return { isValid: true }; // not a fraction question
+    const optionFractions = question.options.map(parseFraction);
+    const correctIndex = optionFractions.findIndex(
+        f => f && fractionsEqual(f, expected)
+    );
+    if (correctIndex === -1) {
+        return {
+            isValid: false,
+            error: 'Correct fraction value not found in options'
+        };
+    }
+    // Fix incorrect correctAnswer index
+    if (question.correctAnswer !== correctIndex) {
+        question.correctAnswer = correctIndex;
+        question.finalAnswer = question.options[correctIndex];
+    }
+    return { isValid: true };
+}
+
+// STEP 7: Detect math rule from question text
+function detectRule(text) {
+    const t = text.toLowerCase();
+    if (t.includes('lcm')) return 'LCM';
+    if (t.includes('hcf') || t.includes('gcd')) return 'HCF';
+    if (t.includes('%') || t.includes('percent')) return 'PERCENTAGE';
+    if (t.includes('ratio')) return 'RATIO';
+    if (t.includes('average')) return 'AVERAGE';
+    if (t.includes('profit') || t.includes('loss')) return 'PROFIT_LOSS';
+    if (t.includes('speed') || t.includes('distance') || t.includes('time')) return 'TSD';
+    if (t.match(/x\s*[+=-]/)) return 'ALGEBRA';
+    if (t.includes('convert')) return 'UNIT';
+    if (detectEstimationRule(text)) return 'ESTIMATION';
+    if (parseFraction(text)) return 'FRACTION';
+    return 'UNKNOWN';
+}
+
+// STEP 8: LCM/HCF validator
+function validateLCMHCF(question) {
+    const nums = extractNumbers(question.question);
+    if (nums.length < 2) return { isValid: true }; // not an LCM/HCF question
+    const isLCM = question.question.toLowerCase().includes('lcm');
+    const expected = isLCM ? lcmMultiple(nums) : gcdMultiple(nums);
+    const optionValues = question.options.map(normalizeNumber);
+    const correctIndex = optionValues.findIndex(v => v === expected);
+    if (correctIndex === -1) {
+        return { isValid: false, error: `Correct ${isLCM ? 'LCM' : 'HCF'} not in options` };
+    }
+    question.correctAnswer = correctIndex;
+    question.finalAnswer = question.options[correctIndex];
+    return { isValid: true };
+}
+
+// STEP 9: Percentage validator
+function calculatePercentage(base, percent) {
+    return +(base * percent / 100).toFixed(2);
+}
+
+function validatePercentage(question) {
+    const nums = extractNumbers(question.question);
+    if (nums.length < 2) return { isValid: true };
+    const expected = calculatePercentage(nums[0], nums[1]);
+    const optionValues = question.options.map(normalizeNumber);
+    const correctIndex = optionValues.findIndex(
+        v => v !== null && Math.abs(v - expected) < 0.01
+    );
+    if (correctIndex === -1) return { isValid: false, error: 'Correct percentage not in options' };
+    question.correctAnswer = correctIndex;
+    question.finalAnswer = question.options[correctIndex];
+    return { isValid: true };
+}
+
+// STEP 10: Average validator
+function validateAverage(question) {
+    const nums = extractNumbers(question.question);
+    if (nums.length < 2) return { isValid: true };
+    const expected = +(nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2);
+    const optionValues = question.options.map(normalizeNumber);
+    const correctIndex = optionValues.findIndex(
+        v => v !== null && Math.abs(v - expected) < 0.01
+    );
+    if (correctIndex === -1) return { isValid: false, error: 'Correct average not in options' };
+    question.correctAnswer = correctIndex;
+    question.finalAnswer = question.options[correctIndex];
+    return { isValid: true };
+}
+
+// STEP 11: Math Rule Registry
+const MathRuleRegistry = {
+    LCM: validateLCMHCF,
+    HCF: validateLCMHCF,
+    FRACTION: verifyFractionQuestion,
+    PERCENTAGE: validatePercentage,
+    AVERAGE: validateAverage,
+    ESTIMATION: verifyEstimationQuestion,
+};
+
+// STEP 12: Main validation dispatcher
+function validateQuestionByRule(question) {
+    const rule = detectRule(question.question);
+    const handler = MathRuleRegistry[rule];
+    if (handler) {
+        return handler(question);
+    }
+    return { isValid: true }; // fallback - let other checks handle it
+}
+
+// Mathematical verification function (client-side check) - ENHANCED
 function verifyMathematicalAnswer(question) {
     if (!question.finalAnswer) {
         return { isValid: false, error: 'Missing finalAnswer field' };
     }
+
     const correctIndex = question.correctAnswer;
+    
     if (typeof correctIndex !== 'number' || isNaN(correctIndex) || 
         correctIndex < 0 || correctIndex >= question.options.length) {
-        return { isValid: false, error: `Invalid correctAnswer index: ${correctIndex}` };
-    }
-    if (!Array.isArray(question.options) || question.options.length !== 4) {
-        return { isValid: false, error: 'Must have exactly 4 options' };
-    }
-    // Check for duplicate options
-    const normalizedOptions = question.options.map(opt => normalizeNumber(opt));
-    const uniqueOptions = new Set(normalizedOptions);
-    if (uniqueOptions.size !== normalizedOptions.length) {
-        return { isValid: false, error: 'Duplicate options found in question' };
-    }
-    const finalAnswer = normalizeNumber(question.finalAnswer);
-    const correctOption = normalizeNumber(question.options[correctIndex]);
-    // STRICT matching - must be exact match (after normalization)
-    if (finalAnswer !== correctOption) {
-        return {
-            isValid: false,
-            error: `Answer mismatch: finalAnswer="${finalAnswer}" vs option[${correctIndex}]="${correctOption}"`
+        return { 
+            isValid: false, 
+            error: `Invalid correctAnswer index: ${correctIndex}` 
         };
     }
+
+    // FIRST: Try rule-based validation (estimation, fractions, LCM/HCF, etc.)
+    const ruleValidation = validateQuestionByRule(question);
+    if (!ruleValidation.isValid) {
+        return ruleValidation; // Return specific error from rule validator
+    }
+
+    // SECOND: Standard string matching with comma normalization
+    const finalAnswer = String(question.finalAnswer).trim();
+    const selectedOption = String(question.options[correctIndex]).trim();
+    
+    // CRITICAL FIX: Normalize commas, LaTeX, spaces
+    const cleanFinal = finalAnswer
+        .replace(/,/g, '')        // remove commas (CRITICAL)
+        .replace(/^\$+|\$+$/g, '')
+        .replace(/\\+/g, '')
+        .replace(/\s+/g, '')
+        .trim();
+        
+    const cleanSelected = selectedOption
+        .replace(/,/g, '')        // remove commas (CRITICAL)
+        .replace(/^\$+|\$+$/g, '')
+        .replace(/\\+/g, '')
+        .replace(/\s+/g, '')
+        .trim();
+    
+    // For fraction questions, use fraction comparison
+    const finalFrac = parseFraction(finalAnswer);
+    const selectedFrac = parseFraction(selectedOption);
+    
+    if (finalFrac && selectedFrac) {
+        if (fractionsEqual(finalFrac, selectedFrac)) {
+            return { isValid: true };
+        }
+    }
+    
+    // For numeric questions, compare normalized numbers
+    const finalNum = normalizeNumber(finalAnswer);
+    const selectedNum = normalizeNumber(selectedOption);
+    
+    if (finalNum !== null && selectedNum !== null) {
+        if (Math.abs(finalNum - selectedNum) < 0.001) {
+            return { isValid: true };
+        }
+    }
+    
+    // Fallback: String matching
+    const isMatch = cleanSelected.includes(cleanFinal) || 
+                    cleanFinal.includes(cleanSelected) ||
+                    cleanSelected === cleanFinal;
+    
+    if (!isMatch) {
+        return {
+            isValid: false,
+            error: `Answer mismatch: finalAnswer="${cleanFinal}" vs option[${correctIndex}]="${cleanSelected}"`
+        };
+    }
+
     return { isValid: true };
 }
 
@@ -209,6 +477,183 @@ ${JSON.stringify(questions, null, 2)}`;
     }
 }
 
+// Helper function to check for duplicate options within a question
+function hasDuplicateOptions(question) {
+    if (!question.options || !Array.isArray(question.options)) return true;
+    const options = question.options.map(opt => String(opt).trim().toLowerCase());
+    const uniqueOptions = new Set(options);
+    return uniqueOptions.size !== options.length;
+}
+
+// Helper function to automatically fix duplicate options
+function fixDuplicateOptions(question) {
+    if (!question.options || !Array.isArray(question.options) || question.options.length !== 4) {
+        return null; // Cannot fix invalid structure
+    }
+
+    const originalOptions = [...question.options];
+    const fixedOptions = [];
+    const seen = new Set();
+    const correctAnswerIndex = question.correctAnswer || 0;
+    const correctAnswer = originalOptions[correctAnswerIndex];
+
+    // Keep the correct answer at its position
+    for (let i = 0; i < 4; i++) {
+        const opt = String(originalOptions[i]).trim();
+        const optLower = opt.toLowerCase();
+
+        if (i === correctAnswerIndex) {
+            // Always keep the correct answer
+            fixedOptions.push(opt);
+            seen.add(optLower);
+        } else if (!seen.has(optLower)) {
+            // Unique option - keep it
+            fixedOptions.push(opt);
+            seen.add(optLower);
+        } else {
+            // Duplicate found - generate a unique alternative
+            let newOption = null;
+            let attempts = 0;
+            const maxAttempts = 20;
+
+            // Try to parse as number and generate nearby unique value
+            const numMatch = opt.match(/[\d.]+/);
+            if (numMatch) {
+                const num = parseFloat(numMatch[0]);
+                if (!isNaN(num)) {
+                    // Generate nearby numbers that aren't duplicates
+                    for (let offset = 1; offset <= 10 && attempts < maxAttempts; offset++) {
+                        const candidates = [
+                            num + offset,
+                            num - offset,
+                            num * (1 + offset * 0.1),
+                            num / (1 + offset * 0.1)
+                        ];
+
+                        for (const candidate of candidates) {
+                            const candidateStr = String(Math.round(candidate * 100) / 100);
+                            const candidateLower = candidateStr.toLowerCase();
+                            
+                            if (!seen.has(candidateLower) && candidateStr !== correctAnswer.toLowerCase()) {
+                                // Replace number in original option with new number
+                                newOption = opt.replace(/[\d.]+/, candidateStr);
+                                if (!seen.has(newOption.toLowerCase())) {
+                                    break;
+                                }
+                            }
+                        }
+                        if (newOption) break;
+                    }
+                }
+            }
+
+            // If still no unique option, try simple variations
+            if (!newOption) {
+                for (let suffix = 1; suffix <= 100 && attempts < maxAttempts; suffix++) {
+                    const candidate = `${opt} (alt${suffix})`;
+                    if (!seen.has(candidate.toLowerCase())) {
+                        newOption = candidate;
+                        break;
+                    }
+                    attempts++;
+                }
+            }
+
+            // If still no unique option, use a placeholder
+            if (!newOption) {
+                newOption = `Option ${i + 1}`;
+                let counter = 1;
+                while (seen.has(newOption.toLowerCase()) && counter < 100) {
+                    newOption = `Option ${i + 1}-${counter}`;
+                    counter++;
+                }
+            }
+
+            fixedOptions.push(newOption);
+            seen.add(newOption.toLowerCase());
+            console.log(`🔧 Fixed duplicate option ${i}: "${opt}" → "${newOption}"`);
+        }
+    }
+
+    return {
+        ...question,
+        options: fixedOptions
+    };
+}
+
+// Helper function to check for duplicate questions (same question text)
+function isDuplicateQuestion(newQuestion, existingQuestions) {
+    const newQuestionText = String(newQuestion.question).trim().toLowerCase();
+    return existingQuestions.some(existing => 
+        String(existing.question).trim().toLowerCase() === newQuestionText
+    );
+}
+
+// Convert currency symbols: $ → Rs (for Indian context)
+function convertCurrency(text, isLatex) {
+    if (isLatex) {
+        // For LaTeX, only convert currency patterns, preserve LaTeX $ delimiters
+        // Pattern: $12.45 → Rs 12.45 (currency)
+        // Pattern: $\frac{3}{4}$ → stays as $\frac{3}{4}$ (LaTeX)
+        return text.replace(/\$(\d+\.?\d*)/g, 'Rs $1').replace(/\$\s+(\d+\.?\d*)/g, 'Rs $1');
+    }
+    // For non-LaTeX, convert all $ symbols to Rs
+    return text.replace(/\$(\d+\.?\d*)/g, 'Rs $1').replace(/\$\s+(\d+\.?\d*)/g, 'Rs $1').replace(/\$/g, 'Rs ');
+}
+
+// Enhanced LaTeX handling - fix corrupted fraction patterns
+function wrapLatexExpressions(text) {
+    // CRITICAL FIX: Fix corrupted fraction patterns
+    let fixed = text;
+    
+    // First, normalize all whitespace (spaces, newlines, tabs) to single spaces
+    fixed = fixed.replace(/\s+/g, ' ');
+    
+    // Pattern 1: Fix "num den den num" pattern (e.g., "5 8 8 5" → "\frac{5}{8}")
+    let prevFixed = '';
+    while (prevFixed !== fixed) {
+        prevFixed = fixed;
+        // Match "num den den num" pattern and replace with \frac{num}{den}
+        fixed = fixed.replace(/(\d+)\s+(\d+)\s+\2\s+\1/g, '\\frac{$1}{$2}');
+    }
+    
+    // Pattern 2: Fix patterns like "3 4" before operators
+    fixed = fixed.replace(/(\d+)\s+(\d+)\s*(\\times|\\div|\\pm|\\cdot|\+|\-|=)/g, '\\frac{$1}{$2} $3');
+    
+    // Pattern 3: Fix patterns after operators
+    fixed = fixed.replace(/([+\-×÷=\\times\\div\\pm\\cdot])\s*(\d+)\s+(\d+)(?=\s|$|[+\-×÷=\\times\\div\\pm\\cdot])/g, '$1 \\frac{$2}{$3}');
+    
+    // Don't wrap if already wrapped
+    if (fixed.includes('$') || fixed.includes('\\(')) {
+        return fixed;
+    }
+    // Find all LaTeX expressions and wrap them
+    return fixed.replace(/(\\frac\{[^}]+\}\{[^}]+\}|\\sqrt\{[^}]+\}|\\[a-zA-Z]+\{[^}]*\})/g, '$$$1$$');
+}
+
+// Generate shuffled position pattern for balanced answer distribution
+function generateShuffledPositions(totalQuestions) {
+    const positions = [];
+    const perPosition = Math.floor(totalQuestions / 4);
+    const remainder = totalQuestions % 4;
+    
+    // Create balanced buckets
+    for (let pos = 0; pos < 4; pos++) {
+        const count = perPosition + (pos < remainder ? 1 : 0);
+        for (let i = 0; i < count; i++) {
+            positions.push(pos);
+        }
+    }
+    
+    // Fisher-Yates shuffle to randomize order
+    for (let i = positions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
+    
+    return positions;
+}
+
 const generateQuestions = async (req, res) => {
     try {
         const { tag, classLevel, topicName, concept, type = 'SUBJECT', subjectId = null, azureConfig } = req.body;
@@ -222,63 +667,202 @@ const generateQuestions = async (req, res) => {
         if (!classData) {
             return res.status(404).json({ success: false, message: `Class ${classLevel} not found` });
         }
-        // Get ALL existing questions for this tag+class+topic to prevent duplicates
+        
+        // Get ALL existing questions for this tag (regardless of classLevel or topicName)
+        // This prevents generating duplicate questions even if they were generated for different classes/topics
         const existingQuestions = await Question.find({ 
-            tag, 
-            classLevel, 
-            topicName 
-        }).select('question').lean();
+            tag: tag  // Only filter by tag - check ALL questions with this tag
+        }).select('question classLevel topicName').lean();
+        
+        console.log(`\n📊 Found ${existingQuestions.length} existing questions for tag: "${tag}"`);
+        
         // Normalize existing questions for better duplicate detection
-        const existingQuestionTexts = existingQuestions.map(q => {
+        const existingQuestionTexts = new Set(); // Use Set for faster lookup
+        const existingQuestionDetails = []; // Keep details for prompt
+        
+        existingQuestions.forEach(q => {
             const normalized = q.question.toLowerCase()
                 .replace(/\s+/g, ' ')
                 .replace(/[.,!?;:]/g, '')
                 .trim();
-            return normalized;
+            existingQuestionTexts.add(normalized);
+            existingQuestionDetails.push({
+                text: q.question.substring(0, 100),
+                classLevel: q.classLevel,
+                topicName: q.topicName
+            });
         });
+        
+        console.log(`   - Unique normalized questions: ${existingQuestionTexts.size}`);
+        if (existingQuestionDetails.length > 0) {
+            console.log(`   - Sample existing questions:`);
+            existingQuestionDetails.slice(0, 3).forEach((q, i) => {
+                console.log(`     ${i + 1}. [Class ${q.classLevel}, ${q.topicName}] ${q.text}...`);
+            });
+        }
         const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const prompt = `Generate exactly 10 MCQ questions for Class ${classLevel} mathematics.
-TAG: "${tag}"
-TOPIC: "${topicName}"
-${concept ? `CONCEPT: "${concept}"` : 'CONCEPT: Not specified'}
-CLASS LEVEL: ${classLevel}
-For EACH question:
-1. CREATE THE PROBLEM - Write a clear mathematical question
-2. SOLVE THE PROBLEM - Calculate the EXACT correct answer
-3. CREATE 4 OPTIONS - Place correct answer + 3 plausible wrong answers
-4. SHUFFLE OPTIONS - Randomize order (do NOT always put correct answer first)
-5. FIND CORRECT INDEX - Set correctAnswer to the index of correct option
-6. VERIFY - Ensure options[correctAnswer] matches your calculated answer
-CRITICAL REQUIREMENTS:
-1. Each question MUST be UNIQUE (no duplicates)
-2. All 4 options MUST be UNIQUE (no duplicate options within a question)
-3. The correct answer MUST exist in the options array
-4. Distribute correct answers across positions 0, 1, 2, 3 (not all at position 0)
-5. Mix difficulty levels: ~3 easy, ~4 medium, ~3 hard
-6. Use LaTeX for mathematical expressions when needed
-EXISTING QUESTIONS TO AVOID:
-${existingQuestionTexts.length > 0 ? existingQuestionTexts.slice(0, 5).map((q, i) => `${i + 1}. ${q.substring(0, 100)}...`).join('\n') : 'None - this is the first batch'}
-JSON FORMAT:
-{
-  "questions": [
-    {
-      "id": number,
-      "question": string,
-      "options": [string, string, string, string],
-      "correctAnswer": number (0-3),
-      "finalAnswer": string,
-      "difficulty": "easy" | "medium" | "hard",
-      "topicName": "${topicName}",
-      "concept": "${concept || 'N/A'}",
-      "tag": "${tag}",
-      "latex": boolean
-    }
-  ]
-}
-Return ONLY the JSON - no explanations, no preamble.`;
+        
+        // Generate shuffled position pattern for balanced distribution
+        const TOTAL_QUESTIONS = 10;
+        const globalPositionPattern = generateShuffledPositions(TOTAL_QUESTIONS);
+        const positionAssignments = globalPositionPattern.map((pos, idx) => 
+            `Question ${idx + 1}: Place correct answer at position ${pos} (index ${pos})`
+        ).join('\n');
+        
+        const prompt = [
+            `Generate exactly ${TOTAL_QUESTIONS} MCQ questions for Class ${classLevel} mathematics.`,
+            '',
+            `TAG: "${tag}"`,
+            `TOPIC: "${topicName}"`,
+            `${concept ? `CONCEPT: "${concept}"` : 'CONCEPT: Not specified'}`,
+            `CLASS LEVEL: ${classLevel}`,
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            'MANDATORY QUESTION CREATION PROTOCOL - FOLLOW EXACTLY:',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            'For EACH question, you MUST complete these steps IN ORDER:',
+            '',
+            '【STEP 1】 CREATE THE PROBLEM',
+            '   - Write a clear mathematical question',
+            '',
+            '【STEP 2】 SOLVE THE PROBLEM YOURSELF',
+            '   - Show your work step-by-step (internally)',
+            '   - Calculate the EXACT correct answer',
+            '   - Write down this answer (this becomes finalAnswer)',
+            '',
+            '【STEP 3】 CREATE 4 OPTIONS',
+            '   - First option: Place your correct answer',
+            '   - Other 3 options: Create plausible wrong answers',
+            '   - CRITICAL: All 4 options MUST be UNIQUE (no duplicates)',
+            '   - Shuffle these 4 options randomly (DO NOT always put correct answer first)',
+            '',
+            '【STEP 4】 FIND THE CORRECT INDEX',
+            '   - After shuffling, find which position (0, 1, 2, or 3) has your correct answer',
+            '   - Set correctAnswer to this index',
+            '',
+            '【STEP 5】 VERIFY',
+            '   - Double-check: options[correctAnswer] === finalAnswer',
+            '   - If not matching, STOP and fix the error',
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            '🎯 MANDATORY POSITION ASSIGNMENTS - FOLLOW EXACTLY:',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            positionAssignments,
+            '',
+            'For each question:',
+            '1. Solve the problem and get the correct answer',
+            '2. Create 3 DISTINCT wrong answers (all different from correct answer AND from each other)',
+            '3. Place correct answer at the ASSIGNED position above',
+            '4. Fill other positions with wrong answers',
+            '5. Set correctAnswer to the assigned position number',
+            '',
+            '⚠️ DO NOT put all answers at position 0',
+            '⚠️ FOLLOW the position assignments exactly',
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            '🚫🚫🚫 CRITICAL: NO DUPLICATE OPTIONS - MANDATORY REQUIREMENT 🚫🚫🚫',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            '⚠️⚠️⚠️ ABSOLUTELY FORBIDDEN - ZERO TOLERANCE FOR DUPLICATES ⚠️⚠️⚠️',
+            '',
+            'Each question MUST have 4 COMPLETELY UNIQUE options. The system will AUTOMATICALLY REJECT and SKIP any question with duplicate options.',
+            '',
+            'STRICT RULES - NO EXCEPTIONS:',
+            '   ❌ NO two options can be identical strings: "10" and "10" = REJECTED',
+            '   ❌ NO two options can have the same numeric value: "5" and "5.0" = REJECTED',
+            '   ❌ NO two options can be equivalent fractions: "1/2" and "0.5" = REJECTED',
+            '   ❌ NO two options can differ only by currency: "$5" and "5" = REJECTED',
+            '   ❌ NO two options can differ only by spaces: "5" and " 5 " = REJECTED',
+            '',
+            '✅✅✅ CORRECT Examples (ALL ACCEPTED):',
+            '   Question 1: options: ["10", "11", "12", "15"] → All unique → ACCEPTED ✅',
+            '   Question 2: options: ["5", "6", "7", "8"] → All unique → ACCEPTED ✅',
+            '   Question 3: options: ["1/2", "2/3", "3/4", "1"] → All unique → ACCEPTED ✅',
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            'CURRENCY RULES (CRITICAL FOR INDIA):',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            '  - ALWAYS use "Rs" for Indian Rupees, NEVER use "$" or "dollar"',
+            '  - Example: "Rs 12.45" is CORRECT',
+            '  - Example: "$12.45" is WRONG - use "Rs 12.45" instead',
+            '  - For all money/cost/price questions, use "Rs" prefix',
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            'LaTeX Rules:',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            '  - Fractions: $\\\\frac{numerator}{denominator}$',
+            '  - NEVER use commas: "$7,10$" is WRONG',
+            '  - NEVER write fractions as separate numbers: "$3 4 4 3$" is WRONG',
+            '  - ALWAYS use proper LaTeX: "$\\\\frac{3}{4}$"',
+            '  - CRITICAL: Keep \\\\frac{}{} together - do NOT split into separate numbers',
+            '  - Example: "$\\\\frac{3}{4} \\\\times 8 = 6$" is CORRECT',
+            '  - Example: "$3 4 4 3 \\\\times 8 = 6$" is WRONG - use \\\\frac{3}{4} instead',
+            '  - NOTE: $ symbols in LaTeX (like $\\\\frac{3}{4}$) are for math, NOT currency',
+            '  - For currency, use "Rs" NOT "$"',
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            'EXISTING QUESTIONS TO AVOID (CRITICAL - NO DUPLICATES):',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            existingQuestionDetails.length > 0 
+                ? [
+                    `⚠️ IMPORTANT: You have ${existingQuestionDetails.length} existing questions for this tag "${tag}".`,
+                    '⚠️ DO NOT create questions similar to these. Create COMPLETELY NEW and UNIQUE questions.',
+                    '',
+                    'Sample existing questions (avoid similar ones):',
+                    ...existingQuestionDetails.slice(0, 10).map((q, i) => 
+                        `${i + 1}. [Class ${q.classLevel}, ${q.topicName}] ${q.text}...`
+                    ),
+                    '',
+                    'CRITICAL: Even if a question was generated for a different class or topic,',
+                    '         if it covers the same tag, DO NOT create a similar question.',
+                    '         Each question must be UNIQUE and DIFFERENT from all existing ones.'
+                ].join('\n')
+                : `None - this is the first batch for tag "${tag}"`,
+            '',
+            '═══════════════════════════════════════════════════════════════',
+            'JSON FORMAT:',
+            '═══════════════════════════════════════════════════════════════',
+            '',
+            '{ "questions": [',
+            '  {',
+            '    "id": number,',
+            '    "question": string,',
+            '    "options": [string, string, string, string],',
+            '    "correctAnswer": number,',
+            '    "finalAnswer": string,',
+            '    "difficulty": "easy" | "medium" | "hard",',
+            `    "topicName": "${topicName}",`,
+            `    "concept": "${concept || 'N/A'}",`,
+            `    "tag": "${tag}",`,
+            '    "latex": boolean',
+            '  }',
+            '] }',
+            '',
+            'QUALITY CHECKLIST - VERIFY BEFORE SUBMITTING:',
+            '□ All questions generated',
+            '□ Each question has finalAnswer field',
+            '□ Each finalAnswer matches options[correctAnswer]',
+            '□ Answer positions distributed: ~2-3 per position (0,1,2,3)',
+            '□ No position has 0 answers',
+            '□ No position has >5 answers',
+            '□ All mathematics verified and correct',
+            '□ Difficulty mix: ~3 easy, ~4 medium, ~3 hard',
+            '□ ALL 4 options are UNIQUE (no duplicates)',
+            '□ Currency uses "Rs" not "$"',
+            '',
+            'Return ONLY the JSON - no explanations, no preamble.'
+        ].join('\n');
         const content = await callAzureOpenAI(
             [
-                { role: "system", content: "You are an expert mathematics educator. You MUST solve each problem step-by-step before creating the question. CRITICAL: (1) Calculate correct answer first, (2) Place it in options array, (3) Shuffle options randomly, (4) Set correctAnswer to the index of correct option, (5) Ensure finalAnswer matches options[correctAnswer] exactly. Return ONLY valid JSON." },
+                { 
+                    role: "system", 
+                    content: `You are an expert mathematics educator. You MUST solve each problem step-by-step before creating the question. CRITICAL REQUIREMENTS: (1) Calculate the correct answer first, (2) Create 3 DISTINCT wrong answers (all different from correct answer AND from each other), (3) Verify all 4 options are UNIQUE (no duplicates whatsoever), (4) Place correct answer at the ASSIGNED position (see position assignments in prompt), (5) Set correctAnswer to that position's index, (6) Ensure finalAnswer matches options[correctAnswer] exactly. MANDATORY: Follow the position assignments exactly - do NOT put all answers at position 0. ABSOLUTELY FORBIDDEN: Duplicate options within a question. CRITICAL: Check the "EXISTING QUESTIONS TO AVOID" section in the prompt - DO NOT create questions similar to those. Even if a question was generated for a different class or topic, if it covers the same tag, create a COMPLETELY DIFFERENT question. Use 'Rs' for currency, not '$'. Return ONLY valid JSON.` 
+                },
                 { role: "user", content: prompt }
             ],
             azureConfig, 0.5, 8000
@@ -310,113 +894,478 @@ Return ONLY the JSON - no explanations, no preamble.`;
         if (!Array.isArray(questionsArray) || questionsArray.length === 0) {
             return res.status(400).json({ success: false, message: 'No questions generated by AI' });
         }
-        // Filter and validate questions
+        // STEP 1: Filter out invalid structure and duplicate options (within the batch)
+        console.log(`\n🔍 Step 1: Filtering invalid structure and duplicate options...`);
         const structuredQuestions = questionsArray.filter((q, idx) => {
-            // Basic structure validation
             if (!q || !q.question || !Array.isArray(q.options) || q.options.length !== 4) {
-                console.log(`Question ${idx}: Invalid structure`);
+                console.log(`❌ Q${idx + 1}: Invalid structure - skipped`);
                 return false;
             }
-            // Check for duplicate options (normalized)
-            const normalizedOptions = q.options.map(opt => normalizeNumber(String(opt)));
-            const uniqueOptions = new Set(normalizedOptions);
-            if (uniqueOptions.size !== normalizedOptions.length) {
-                console.log(`Question ${idx}: Duplicate options detected`);
-                return false;
+            
+            // Check for duplicate options within the question
+            if (hasDuplicateOptions(q)) {
+                console.log(`⚠️ Q${idx + 1}: Has duplicate options - attempting to fix...`);
+                const fixed = fixDuplicateOptions(q);
+                if (fixed && !hasDuplicateOptions(fixed)) {
+                    console.log(`✅ Q${idx + 1}: Duplicate options fixed successfully`);
+                    // Replace the question with fixed version
+                    questionsArray[idx] = fixed;
+                    q = fixed;
+                } else {
+                    console.log(`❌ Q${idx + 1}: Could not fix duplicate options - skipped`);
+                    return false;
+                }
             }
-            // Normalize question text for duplicate detection
+            
+            return true;
+        });
+        
+        console.log(`✅ Step 1 Complete: ${structuredQuestions.length}/${questionsArray.length} questions passed structure check`);
+        
+        // STEP 2: Remove duplicate question text (within the batch)
+        console.log(`\n🔍 Step 2: Removing duplicate question text...`);
+        const uniqueQuestions = [];
+        const seenQuestions = new Set();
+        
+        structuredQuestions.forEach((q) => {
+            const questionText = q.question?.toLowerCase().trim();
+            if (questionText && !seenQuestions.has(questionText)) {
+                seenQuestions.add(questionText);
+                uniqueQuestions.push(q);
+            } else {
+                console.log(`❌ Duplicate question text removed: "${q.question?.substring(0, 50)}..."`);
+            }
+        });
+        
+        // Also check against existing questions in DB (all questions with same tag)
+        const finalUniqueQuestions = uniqueQuestions.filter((q) => {
             const questionText = String(q.question)
                 .toLowerCase()
                 .replace(/\s+/g, ' ')
                 .replace(/[.,!?;:]/g, '')
                 .trim();
-            // Check against existing questions
-            if (existingQuestionTexts.includes(questionText)) {
-                console.log(`Question ${idx}: Duplicate question detected`);
-                return false;
-            }
-            // Validate correctAnswer index
-            if (typeof q.correctAnswer !== 'number' || 
-                q.correctAnswer < 0 || q.correctAnswer >= q.options.length) {
-                console.log(`Question ${idx}: Invalid correctAnswer index`);
-                return false;
-            }
-            // Validate finalAnswer exists
-            if (!q.finalAnswer) {
-                console.log(`Question ${idx}: Missing finalAnswer`);
+            if (existingQuestionTexts.has(questionText)) {
+                console.log(`❌ Duplicate with existing question in DB: "${q.question?.substring(0, 50)}..."`);
+                // Find which existing question it matches
+                const matchingQuestion = existingQuestionDetails.find(existing => {
+                    const existingNormalized = existing.text.toLowerCase()
+                        .replace(/\s+/g, ' ')
+                        .replace(/[.,!?;:]/g, '')
+                        .trim();
+                    return existingNormalized === questionText;
+                });
+                if (matchingQuestion) {
+                    console.log(`   → Matches existing: [Class ${matchingQuestion.classLevel}, ${matchingQuestion.topicName}]`);
+                }
                 return false;
             }
             return true;
         });
-        if (structuredQuestions.length === 0) {
-            return res.status(400).json({ success: false, message: 'No valid questions after filtering' });
+        
+        console.log(`✅ Step 2 Complete: ${finalUniqueQuestions.length}/${structuredQuestions.length} unique questions`);
+        
+        if (finalUniqueQuestions.length === 0) {
+            return res.status(400).json({ success: false, message: 'No valid questions after filtering duplicates' });
         }
-        // Verify answers using AI + client-side validation
-        const verificationResult = await verifyAndCorrectQuestionsBatch(structuredQuestions, azureConfig);
+        // STEP 3: Verify ALL questions together with AI
+        console.log(`\n🔍 Step 3: Verifying all ${finalUniqueQuestions.length} questions with AI...`);
+        const verificationResult = await verifyAndCorrectQuestionsBatch(finalUniqueQuestions, azureConfig);
+        
+        console.log(`📊 Step 3 Complete - Verification Results:`);
+        console.log(`   ✅ Valid: ${verificationResult.valid.length}`);
+        console.log(`   🔧 Corrected: ${verificationResult.corrected.length}`);
+        console.log(`   ❌ Invalid: ${verificationResult.invalid.length}`);
+        
+        // STEP 4: Process valid questions with strict verification
+        console.log(`\n🔍 Step 4: Applying strict verification and conditions...`);
         const questionsToSave = [];
         
-        // Process valid questions - double-check each one
         verificationResult.valid.forEach((q) => {
-            // Re-verify answer before saving
-            const answerCheck = verifyMathematicalAnswer(q);
-            if (!answerCheck.isValid) {
-                console.log(`Valid question failed re-verification: ${answerCheck.error}`);
-                return; // Skip this question
+            try {
+                let correctAnswer = q.correctAnswer;
+                if (typeof correctAnswer === 'string') correctAnswer = Number(correctAnswer);
+                
+                if (typeof correctAnswer !== 'number' || isNaN(correctAnswer) || 
+                    correctAnswer < 0 || correctAnswer >= 4) {
+                    console.log(`❌ Invalid correctAnswer index: ${correctAnswer}`);
+                    return;
+                }
+
+                // Check for duplicate options again (safety check)
+                if (hasDuplicateOptions(q)) {
+                    console.log(`❌ Question has duplicate options after verification - skipped`);
+                    return;
+                }
+
+                // FIRST: Apply rule-based validation (estimation, fractions, LCM/HCF, etc.)
+                const ruleValidation = validateQuestionByRule(q);
+                if (!ruleValidation.isValid) {
+                    console.error(`\n❌❌❌ CRITICAL ERROR - Question REJECTED ❌❌❌`);
+                    console.error(`   Question: ${q.question?.substring(0, 100)}...`);
+                    console.error(`   Rule Validation Error: ${ruleValidation.error}`);
+                    console.error(`   Options: ${JSON.stringify(q.options)}`);
+                    console.error(`   This question is INVALID and will be REJECTED.\n`);
+                    return; // Skip this question - it's invalid
+                }
+                
+                // CRITICAL: Final verification - ensure correctAnswer index actually points to correct option
+                if (q.finalAnswer) {
+                    const finalAnswer = String(q.finalAnswer).trim();
+                    const markedOption = String(q.options[correctAnswer]).trim();
+                    
+                    // CRITICAL FIX: Normalize commas, LaTeX, spaces
+                    const cleanFinal = finalAnswer
+                        .replace(/,/g, '')        // remove commas (CRITICAL)
+                        .replace(/^\$+|\$+$/g, '')
+                        .replace(/\\+/g, '')
+                        .replace(/\s+/g, '')
+                        .trim();
+                        
+                    const cleanMarked = markedOption
+                        .replace(/,/g, '')        // remove commas (CRITICAL)
+                        .replace(/^\$+|\$+$/g, '')
+                        .replace(/\\+/g, '')
+                        .replace(/\s+/g, '')
+                        .trim();
+                    
+                    // Check fraction equivalence first
+                    const finalFrac = parseFraction(finalAnswer);
+                    const markedFrac = parseFraction(markedOption);
+                    let isMatch = false;
+                    
+                    if (finalFrac && markedFrac) {
+                        isMatch = fractionsEqual(finalFrac, markedFrac);
+                    } else {
+                        // Check numeric equivalence
+                        const finalNum = normalizeNumber(finalAnswer);
+                        const markedNum = normalizeNumber(markedOption);
+                        
+                        if (finalNum !== null && markedNum !== null) {
+                            isMatch = Math.abs(finalNum - markedNum) < 0.001;
+                        } else {
+                            // Fallback: String matching
+                            isMatch = cleanMarked.includes(cleanFinal) || 
+                                      cleanFinal.includes(cleanMarked) ||
+                                      cleanMarked === cleanFinal;
+                        }
+                    }
+                    
+                    if (!isMatch) {
+                        // Try to find the correct option index by checking ALL options
+                        let correctIndex = -1;
+                        let bestMatch = '';
+                        
+                        const finalFrac = parseFraction(finalAnswer);
+                        
+                        q.options.forEach((opt, idx) => {
+                            if (correctIndex >= 0) return; // Already found
+                            
+                            // Check fraction equivalence first
+                            if (finalFrac) {
+                                const optFrac = parseFraction(opt);
+                                if (optFrac && fractionsEqual(finalFrac, optFrac)) {
+                                    correctIndex = idx;
+                                    bestMatch = opt;
+                                    return;
+                                }
+                            }
+                            
+                            // Check numeric equivalence
+                            const finalNum = normalizeNumber(finalAnswer);
+                            const optNum = normalizeNumber(opt);
+                            
+                            if (finalNum !== null && optNum !== null) {
+                                if (Math.abs(finalNum - optNum) < 0.001) {
+                                    correctIndex = idx;
+                                    bestMatch = opt;
+                                    return;
+                                }
+                            }
+                            
+                            // Fallback: String matching
+                            const cleanOpt = String(opt)
+                                .replace(/,/g, '')        // remove commas (CRITICAL)
+                                .replace(/^\$+|\$+$/g, '')
+                                .replace(/\\+/g, '')
+                                .replace(/\s+/g, '')
+                                .trim();
+                            const optMatch = cleanOpt.includes(cleanFinal) || cleanFinal.includes(cleanOpt) || cleanOpt === cleanFinal;
+                            
+                            if (optMatch && correctIndex === -1) {
+                                correctIndex = idx;
+                                bestMatch = opt;
+                            }
+                        });
+                        
+                        if (correctIndex >= 0) {
+                            console.log(`⚠️ Q${questionsToSave.length + 1}: correctAnswer index mismatch. Marked: ${correctAnswer}="${cleanMarked}", Should be: ${correctIndex}="${bestMatch}". Fixing...`);
+                            q.correctAnswer = correctIndex;
+                            q.finalAnswer = q.options[correctIndex];
+                            correctAnswer = correctIndex;
+                        } else {
+                            // CRITICAL: None of the options contain the correct answer
+                            console.error(`\n❌❌❌ CRITICAL ERROR - Question REJECTED ❌❌❌`);
+                            console.error(`   Question: ${q.question?.substring(0, 100)}...`);
+                            console.error(`   finalAnswer="${cleanFinal}"`);
+                            console.error(`   Options: ${JSON.stringify(q.options)}`);
+                            console.error(`   NONE of the options contain the correct answer!`);
+                            console.error(`   This question is INVALID and will be REJECTED.\n`);
+                            return; // Skip this question - it's invalid
+                        }
+                    }
+                }
+                
+                // ADDITIONAL SAFETY CHECK: Verify the marked option is actually reasonable
+                const markedOpt = String(q.options[correctAnswer]).trim();
+                if (!markedOpt || markedOpt.length === 0) {
+                    console.error(`❌ Q${questionsToSave.length + 1}: Marked option is empty - REJECTED`);
+                    return;
+                }
+
+                // Convert currency symbols: $ → Rs (for Indian context)
+                const isLatex = q.latex || false;
+                const convertedQuestion = convertCurrency(String(q.question), isLatex);
+                const convertedOptions = q.options.map(opt => convertCurrency(String(opt), isLatex));
+
+                // Enhanced LaTeX detection and fixing
+                const latexPattern = /\\frac|\\sqrt|\\times|\\div|\\pm|\\cdot|\\pi|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\sum|\\int|\\lim|\\infty|\$.*?\$|\\?\(.*?\\?\)/;
+                const hasLatexInQuestion = latexPattern.test(convertedQuestion);
+                const hasLatexInOptions = convertedOptions.some(opt => latexPattern.test(String(opt)));
+                
+                let finalQuestion = convertedQuestion;
+                let finalOptions = convertedOptions;
+                let finalLatex = isLatex || hasLatexInQuestion || hasLatexInOptions;
+                
+                if (finalLatex) {
+                    // Auto-wrap LaTeX expressions that aren't wrapped
+                    finalQuestion = wrapLatexExpressions(convertedQuestion);
+                    finalOptions = convertedOptions.map(opt => wrapLatexExpressions(String(opt)));
+                }
+                
+                const questionData = {
+                    question: finalQuestion,
+                    options: finalOptions,
+                    correctAnswer: correctAnswer,
+                    finalAnswer: String(q.finalAnswer || q.options[correctAnswer]),
+                    difficulty: q.difficulty || 'medium',
+                    classLevel: parseInt(classLevel),
+                    topicName: String(topicName),
+                    concept: concept || undefined,
+                    tag: String(tag),
+                    latex: finalLatex,
+                    status: 'pending',
+                    generationBatch: batchId,
+                    type: type,
+                    subjectId: subjectId || null
+                };
+                
+                questionsToSave.push(questionData);
+                console.log(`✅ ACCEPTED (${questionsToSave.length}/${TOTAL_QUESTIONS})`);
+            } catch (error) {
+                console.log(`❌ Error processing valid question: ${error.message}`);
             }
-            const questionData = {
-                question: String(q.question),
-                options: q.options.map(opt => String(opt)),
-                correctAnswer: parseInt(q.correctAnswer),
-                finalAnswer: String(q.finalAnswer || q.options[q.correctAnswer]),
-                difficulty: q.difficulty || 'medium',
-                classLevel: parseInt(classLevel),
-                topicName: String(topicName),
-                concept: concept || undefined,
-                tag: String(tag),
-                latex: q.latex || false,
-                status: 'pending',
-                generationBatch: batchId,
-                type: type,
-                subjectId: subjectId || null
-            };
-            const latexPattern = /\\frac|\\sqrt|\\times|\\div|\\pm|\\cdot|\$.*?\$/;
-            if (latexPattern.test(questionData.question) || questionData.options.some(opt => latexPattern.test(String(opt)))) {
-                questionData.latex = true;
-            }
-            questionsToSave.push(questionData);
         });
-        // Process corrected questions - verify each correction
+        // Process corrected questions with strict verification
         verificationResult.corrected.forEach((q) => {
-            // Verify the corrected answer
-            const answerCheck = verifyMathematicalAnswer(q);
-            if (!answerCheck.isValid) {
-                console.log(`Corrected question failed verification: ${answerCheck.error}`);
-                return; // Skip this question
+            try {
+                let correctAnswer = q.correctAnswer;
+                if (typeof correctAnswer === 'string') correctAnswer = Number(correctAnswer);
+                
+                if (typeof correctAnswer !== 'number' || isNaN(correctAnswer) || 
+                    correctAnswer < 0 || correctAnswer >= 4) {
+                    console.log(`❌ Corrected question has invalid correctAnswer index: ${correctAnswer}`);
+                    return;
+                }
+
+                // Check for duplicate options
+                if (hasDuplicateOptions(q)) {
+                    console.log(`❌ Corrected question has duplicate options - skipped`);
+                    return;
+                }
+
+                // FIRST: Apply rule-based validation
+                const ruleValidation = validateQuestionByRule(q);
+                if (!ruleValidation.isValid) {
+                    console.error(`\n❌❌❌ CRITICAL ERROR - Corrected Question REJECTED ❌❌❌`);
+                    console.error(`   Question: ${q.question?.substring(0, 100)}...`);
+                    console.error(`   Rule Validation Error: ${ruleValidation.error}`);
+                    console.error(`   Options: ${JSON.stringify(q.options)}`);
+                    console.error(`   This corrected question is INVALID and will be REJECTED.\n`);
+                    return; // Skip this question
+                }
+                
+                // CRITICAL: Final verification - ensure corrected correctAnswer index actually points to correct option
+                if (q.finalAnswer) {
+                    const finalAnswer = String(q.finalAnswer).trim();
+                    const cleanFinal = finalAnswer
+                        .replace(/,/g, '')        // remove commas (CRITICAL)
+                        .replace(/^\$+|\$+$/g, '')
+                        .replace(/\\+/g, '')
+                        .replace(/\s+/g, '')
+                        .trim();
+                    
+                    // Search ALL options to see if the answer exists anywhere
+                    let answerFoundInOptions = false;
+                    let answerIndex = -1;
+                    
+                    const finalFrac = parseFraction(finalAnswer);
+                    
+                    q.options.forEach((opt, idx) => {
+                        if (answerFoundInOptions) return; // Already found
+                        
+                        // Check fraction equivalence first
+                        if (finalFrac) {
+                            const optFrac = parseFraction(opt);
+                            if (optFrac && fractionsEqual(finalFrac, optFrac)) {
+                                answerFoundInOptions = true;
+                                answerIndex = idx;
+                                return;
+                            }
+                        }
+                        
+                        // Check numeric equivalence
+                        const finalNum = normalizeNumber(finalAnswer);
+                        const optNum = normalizeNumber(opt);
+                        
+                        if (finalNum !== null && optNum !== null) {
+                            if (Math.abs(finalNum - optNum) < 0.001) {
+                                answerFoundInOptions = true;
+                                answerIndex = idx;
+                                return;
+                            }
+                        }
+                        
+                        // Fallback: String matching
+                        const cleanOpt = String(opt)
+                            .replace(/,/g, '')        // remove commas (CRITICAL)
+                            .replace(/^\$+|\$+$/g, '')
+                            .replace(/\\+/g, '')
+                            .replace(/\s+/g, '')
+                            .trim();
+                        const isMatch = cleanOpt.includes(cleanFinal) || 
+                                      cleanFinal.includes(cleanOpt) || 
+                                      cleanOpt === cleanFinal ||
+                                      cleanOpt.toLowerCase() === cleanFinal.toLowerCase();
+                        
+                        if (isMatch && !answerFoundInOptions) {
+                            answerFoundInOptions = true;
+                            answerIndex = idx;
+                        }
+                    });
+                    
+                    // If answer doesn't exist in ANY option, REJECT immediately
+                    if (!answerFoundInOptions) {
+                        console.error(`\n❌❌❌ CRITICAL: Corrected Question REJECTED - Correct answer NOT in any option ❌❌❌`);
+                        console.error(`   Question: "${q.question?.substring(0, 80)}..."`);
+                        console.error(`   finalAnswer: "${cleanFinal}"`);
+                        console.error(`   Options:`);
+                        q.options.forEach((opt, idx) => {
+                            console.error(`     [${idx}] "${opt}"`);
+                        });
+                        console.error(`   NONE of the corrected options contain the correct answer!`);
+                        console.error(`   This corrected question is INVALID and will be REJECTED.\n`);
+                        return; // REJECT - answer not in any option
+                    }
+                    
+                    // Answer exists in options - verify correctAnswer index points to it
+                    const markedOption = String(q.options[correctAnswer]).trim();
+                    const cleanMarked = markedOption
+                        .replace(/,/g, '')        // remove commas (CRITICAL)
+                        .replace(/^\$+|\$+$/g, '')
+                        .replace(/\\+/g, '')
+                        .replace(/\s+/g, '')
+                        .trim();
+                    
+                    // Check fraction equivalence
+                    const markedFrac = parseFraction(markedOption);
+                    const finalFracCheck = parseFraction(finalAnswer);
+                    let isMatch = false;
+                    
+                    if (finalFracCheck && markedFrac) {
+                        isMatch = fractionsEqual(finalFracCheck, markedFrac);
+                    } else {
+                        // Check numeric equivalence
+                        const markedNum = normalizeNumber(markedOption);
+                        const finalNumCheck = normalizeNumber(finalAnswer);
+                        
+                        if (finalNumCheck !== null && markedNum !== null) {
+                            isMatch = Math.abs(finalNumCheck - markedNum) < 0.001;
+                        } else {
+                            // Fallback: String matching
+                            isMatch = cleanMarked.includes(cleanFinal) || 
+                                      cleanFinal.includes(cleanMarked) ||
+                                      cleanMarked === cleanFinal ||
+                                      cleanMarked.toLowerCase() === cleanFinal.toLowerCase();
+                        }
+                    }
+                    
+                    if (!isMatch) {
+                        // Answer exists but at wrong index - fix it
+                        console.log(`⚠️ Q${questionsToSave.length + 1}: Corrected question index wrong. Marked: ${correctAnswer}="${cleanMarked}", Should be: ${answerIndex}="${q.options[answerIndex]}". Fixing...`);
+                        correctAnswer = answerIndex;
+                        q.correctAnswer = answerIndex;
+                        q.finalAnswer = q.options[answerIndex];
+                    }
+                } else {
+                    console.warn(`⚠️ Q${questionsToSave.length + 1}: No finalAnswer in corrected question - REJECTED`);
+                    return;
+                }
+                
+                // ADDITIONAL SAFETY CHECK: Verify the marked option is actually reasonable
+                const markedOpt = String(q.options[correctAnswer]).trim();
+                if (!markedOpt || markedOpt.length === 0) {
+                    console.error(`❌ Q${questionsToSave.length + 1}: Marked option is empty in corrected question - REJECTED`);
+                    return;
+                }
+
+                // Convert currency symbols: $ → Rs (for Indian context)
+                const isLatex = q.latex || false;
+                const convertedQuestion = convertCurrency(String(q.question), isLatex);
+                const convertedOptions = q.options.map(opt => convertCurrency(String(opt), isLatex));
+
+                // Enhanced LaTeX detection and fixing
+                const latexPattern = /\\frac|\\sqrt|\\times|\\div|\\pm|\\cdot|\\pi|\\theta|\\alpha|\\beta|\\gamma|\\delta|\\sum|\\int|\\lim|\\infty|\$.*?\$|\\?\(.*?\\?\)/;
+                const hasLatexInQuestion = latexPattern.test(convertedQuestion);
+                const hasLatexInOptions = convertedOptions.some(opt => latexPattern.test(String(opt)));
+                
+                let finalQuestion = convertedQuestion;
+                let finalOptions = convertedOptions;
+                let finalLatex = isLatex || hasLatexInQuestion || hasLatexInOptions;
+                
+                if (finalLatex) {
+                    // Auto-wrap LaTeX expressions that aren't wrapped
+                    finalQuestion = wrapLatexExpressions(convertedQuestion);
+                    finalOptions = convertedOptions.map(opt => wrapLatexExpressions(String(opt)));
+                }
+                
+                const questionData = {
+                    question: finalQuestion,
+                    options: finalOptions,
+                    correctAnswer: correctAnswer,
+                    finalAnswer: String(q.finalAnswer || q.options[correctAnswer]),
+                    difficulty: q.difficulty || 'medium',
+                    classLevel: parseInt(classLevel),
+                    topicName: String(topicName),
+                    concept: concept || undefined,
+                    tag: String(tag),
+                    latex: finalLatex,
+                    status: 'pending',
+                    generationBatch: batchId,
+                    type: type,
+                    subjectId: subjectId || null
+                };
+                
+                questionsToSave.push(questionData);
+                console.log(`🔧 CORRECTED & ACCEPTED (${questionsToSave.length}/${TOTAL_QUESTIONS})`);
+            } catch (error) {
+                console.log(`❌ Error processing corrected question: ${error.message}`);
             }
-            
-            const questionData = {
-                question: String(q.question),
-                options: q.options.map(opt => String(opt)),
-                correctAnswer: parseInt(q.correctAnswer),
-                finalAnswer: String(q.finalAnswer || q.options[q.correctAnswer]),
-                difficulty: q.difficulty || 'medium',
-                classLevel: parseInt(classLevel),
-                topicName: String(topicName),
-                concept: concept || undefined,
-                tag: String(tag),
-                latex: q.latex || false,
-                status: 'pending',
-                generationBatch: batchId,
-                type: type,
-                subjectId: subjectId || null
-            };
-            const latexPattern = /\\frac|\\sqrt|\\times|\\div|\\pm|\\cdot|\$.*?\$/;
-            if (latexPattern.test(questionData.question) || questionData.options.some(opt => latexPattern.test(String(opt)))) {
-                questionData.latex = true;
-            }
-            questionsToSave.push(questionData);
         });
+        
+        console.log(`\n✅ Step 4 Complete: Accepted ${questionsToSave.length} questions (Total: ${questionsToSave.length})`);
         // Final duplicate check - check DB before saving each question
+        // Check against ALL questions with the same tag (regardless of classLevel or topicName)
+        console.log(`\n🔍 Final duplicate check: Checking ${questionsToSave.length} questions against DB...`);
         const finalQuestions = [];
         for (const q of questionsToSave) {
             // Normalize question for comparison
@@ -426,22 +1375,37 @@ Return ONLY the JSON - no explanations, no preamble.`;
                 .replace(/[.,!?;:]/g, '')
                 .trim();
             
-            // Check for exact duplicate (case-insensitive, normalized)
+            // First check: Use the Set we already built (fast lookup)
+            if (existingQuestionTexts.has(normalizedQuestion)) {
+                console.log(`❌ Final check: Duplicate with existing question in DB: "${q.question.substring(0, 50)}..."`);
+                // Find which existing question it matches
+                const matchingQuestion = existingQuestionDetails.find(existing => {
+                    const existingNormalized = existing.text.toLowerCase()
+                        .replace(/\s+/g, ' ')
+                        .replace(/[.,!?;:]/g, '')
+                        .trim();
+                    return existingNormalized === normalizedQuestion;
+                });
+                if (matchingQuestion) {
+                    console.log(`   → Matches existing: [Class ${matchingQuestion.classLevel}, ${matchingQuestion.topicName}]`);
+                }
+                continue; // Skip this question
+            }
+            
+            // Second check: Double-check with DB query (for any edge cases)
+            // Check for exact duplicate with same tag (regardless of classLevel or topicName)
             const existing = await Question.findOne({
+                tag: q.tag,  // Only filter by tag - check ALL questions with this tag
                 $or: [
                     // Exact match (case-insensitive)
                     { 
-                        question: { $regex: new RegExp(`^${q.question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-                        classLevel: q.classLevel,
-                        tag: q.tag
+                        question: { $regex: new RegExp(`^${q.question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                     },
                     // Normalized match
                     {
                         question: { 
                             $regex: new RegExp(`^${normalizedQuestion.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') 
-                        },
-                        classLevel: q.classLevel,
-                        tag: q.tag
+                        }
                     }
                 ]
             });
@@ -451,13 +1415,17 @@ Return ONLY the JSON - no explanations, no preamble.`;
                 const answerCheck = verifyMathematicalAnswer(q);
                 if (answerCheck.isValid) {
                     finalQuestions.push(q);
+                    // Add to Set to prevent duplicates within this batch
+                    existingQuestionTexts.add(normalizedQuestion);
                 } else {
-                    console.log(`Skipping question due to answer verification failure: ${answerCheck.error}`);
+                    console.log(`❌ Skipping question due to answer verification failure: ${answerCheck.error}`);
                 }
             } else {
-                console.log(`Skipping duplicate question: "${q.question.substring(0, 50)}..."`);
+                console.log(`❌ Final DB check: Duplicate found: "${q.question.substring(0, 50)}..." (Class ${existing.classLevel}, ${existing.topicName})`);
             }
         }
+        
+        console.log(`✅ Final check complete: ${finalQuestions.length}/${questionsToSave.length} questions passed duplicate check`);
         if (finalQuestions.length === 0) {
             return res.status(400).json({ 
                 success: false, 

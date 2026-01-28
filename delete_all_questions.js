@@ -7,37 +7,23 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const Question = require('./models/Question');
 
-// Load environment variables
+// Load environment variables (same as server.js)
 dotenv.config();
-
-// Allow MONGO_URI to be passed as command line argument or environment variable
-const args = process.argv.slice(2);
-let mongoUri = process.env.MONGO_URI;
-
-// Check for --mongo-uri argument
-args.forEach(arg => {
-    if (arg.startsWith('--mongo-uri=')) {
-        mongoUri = arg.split('=')[1];
-    }
-});
 
 const connectDB = async () => {
     try {
-        if (!mongoUri) {
-            console.error('❌ Error: MONGO_URI is not set');
-            console.error('\nOptions:');
-            console.error('   1. Set MONGO_URI in your .env file');
-            console.error('   2. Pass it as argument: node delete_all_questions.js --mongo-uri="your-connection-string"');
-            console.error('   3. Set environment variable: MONGO_URI="your-connection-string" node delete_all_questions.js');
+        if (!process.env.MONGO_URI) {
+            console.error('❌ Error: MONGO_URI is not set in environment variables');
+            console.error('   Please check your .env file');
             process.exit(1);
         }
         
         console.log('🔌 Connecting to MongoDB...');
-        await mongoose.connect(mongoUri, {
+        const conn = await mongoose.connect(process.env.MONGO_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
-        console.log('✅ MongoDB Connected');
+        console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     } catch (err) {
         console.error(`❌ Error: ${err.message}`);
         process.exit(1);
