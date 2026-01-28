@@ -1757,6 +1757,276 @@ const deleteAllQuestions = async (req, res) => {
     }
 };
 
+// ============================================================================
+// QUESTION RETRIEVAL APIs (Shared by User and Admin)
+// ============================================================================
+
+// API 1: Get questions by tag and class
+const getQuestionsByTagAndClass = async (req, res) => {
+    try {
+        const { tag, classLevel } = req.query;
+        
+        if (!tag || !classLevel) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'tag and classLevel are required' 
+            });
+        }
+        
+        const query = {
+            tag: tag,
+            classLevel: parseInt(classLevel),
+            status: 'approved' // Only return approved questions
+        };
+        
+        const questions = await Question.find(query)
+            .select('-approvedBy -rejectedBy -rejectedAt -rejectionReason -generationBatch')
+            .sort({ createdAt: -1 })
+            .lean();
+        
+        res.json({
+            success: true,
+            data: {
+                questions,
+                count: questions.length,
+                tag,
+                classLevel: parseInt(classLevel)
+            }
+        });
+    } catch (error) {
+        console.error('Get questions by tag and class error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error fetching questions', 
+            error: error.message 
+        });
+    }
+};
+
+// API 2: Get random questions by class, topic, type, and number (equal distribution across tags)
+const getRandomQuestionsByTopic = async (req, res) => {
+    try {
+        const { classLevel, topicName, type, numberOfQuestions } = req.query;
+        
+        if (!classLevel || !topicName || !type || !numberOfQuestions) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'classLevel, topicName, type, and numberOfQuestions are required' 
+            });
+        }
+        
+        const numQuestions = parseInt(numberOfQuestions);
+        if (isNaN(numQuestions) || numQuestions <= 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'numberOfQuestions must be a positive number' 
+            });
+        }
+        
+        // Build base query
+        const baseQuery = {
+            classLevel: parseInt(classLevel),
+            topicName: topicName,
+            type: type,
+            status: 'approved'
+        };
+        
+        // Get all unique tags for this topic, class, and type
+        const tags = await Question.distinct('tag', baseQuery);
+        
+        if (tags.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    questions: [],
+                    count: 0,
+                    message: `No approved questions found for Class ${classLevel}, Topic: ${topicName}, Type: ${type}`
+                }
+            });
+        }
+        
+        // Calculate questions per tag (equal distribution)
+        const questionsPerTag = Math.floor(numQuestions / tags.length);
+        const remainder = numQuestions % tags.length;
+        
+        const selectedQuestions = [];
+        const tagStats = {};
+        
+        // Get questions from each tag
+        for (let i = 0; i < tags.length; i++) {
+            const tag = tags[i];
+            const countForThisTag = questionsPerTag + (i < remainder ? 1 : 0);
+            
+            // Get all questions for this tag
+            const tagQuestions = await Question.find({
+                ...baseQuery,
+                tag: tag
+            }).select('-approvedBy -rejectedBy -rejectedAt -rejectionReason -generationBatch').lean();
+            
+            // Randomly select questions from this tag
+            const shuffled = tagQuestions.sort(() => Math.random() - 0.5);
+            const selected = shuffled.slice(0, countForThisTag);
+            
+            selectedQuestions.push(...selected);
+            tagStats[tag] = {
+                available: tagQuestions.length,
+                selected: selected.length,
+                requested: countForThisTag
+            };
+        }
+        
+        // Shuffle final questions to randomize order
+        const finalQuestions = selectedQuestions.sort(() => Math.random() - 0.5);
+        
+        res.json({
+            success: true,
+            data: {
+                questions: finalQuestions,
+                count: finalQuestions.length,
+                requested: numQuestions,
+                classLevel: parseInt(classLevel),
+                topicName: topicName,
+                type: type,
+                tagDistribution: tagStats,
+                totalTags: tags.length
+            }
+        });
+    } catch (error) {
+        console.error('Get random questions by topic error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error fetching questions', 
+            error: error.message 
+        });
+    }
+};
+
+// API 3: Get questions by class, type, and number (equal distribution across topics, then tags)
+const getQuestionsByClassAndType = async (req, res) => {
+    try {
+        const { classLevel, type, numberOfQuestions } = req.query;
+        
+        if (!classLevel || !type || !numberOfQuestions) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'classLevel, type, and numberOfQuestions are required' 
+            });
+        }
+        
+        const numQuestions = parseInt(numberOfQuestions);
+        if (isNaN(numQuestions) || numQuestions <= 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'numberOfQuestions must be a positive number' 
+            });
+        }
+        
+        // Build base query
+        const baseQuery = {
+            classLevel: parseInt(classLevel),
+            type: type,
+            status: 'approved'
+        };
+        
+        // Get all unique topics for this class and type
+        const topics = await Question.distinct('topicName', baseQuery);
+        
+        if (topics.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    questions: [],
+                    count: 0,
+                    message: `No approved questions found for Class ${classLevel}, Type: ${type}`
+                }
+            });
+        }
+        
+        // Calculate questions per topic (equal distribution)
+        const questionsPerTopic = Math.floor(numQuestions / topics.length);
+        const remainder = numQuestions % topics.length;
+        
+        const selectedQuestions = [];
+        const topicStats = {};
+        
+        // Get questions from each topic
+        for (let i = 0; i < topics.length; i++) {
+            const topicName = topics[i];
+            const countForThisTopic = questionsPerTopic + (i < remainder ? 1 : 0);
+            
+            // Get all unique tags for this topic
+            const tags = await Question.distinct('tag', {
+                ...baseQuery,
+                topicName: topicName
+            });
+            
+            if (tags.length === 0) continue;
+            
+            // Calculate questions per tag within this topic
+            const questionsPerTag = Math.floor(countForThisTopic / tags.length);
+            const tagRemainder = countForThisTopic % tags.length;
+            
+            const topicQuestions = [];
+            const tagStatsForTopic = {};
+            
+            // Get questions from each tag in this topic
+            for (let j = 0; j < tags.length; j++) {
+                const tag = tags[j];
+                const countForThisTag = questionsPerTag + (j < tagRemainder ? 1 : 0);
+                
+                // Get all questions for this tag
+                const tagQuestions = await Question.find({
+                    ...baseQuery,
+                    topicName: topicName,
+                    tag: tag
+                }).select('-approvedBy -rejectedBy -rejectedAt -rejectionReason -generationBatch').lean();
+                
+                // Randomly select questions from this tag
+                const shuffled = tagQuestions.sort(() => Math.random() - 0.5);
+                const selected = shuffled.slice(0, countForThisTag);
+                
+                topicQuestions.push(...selected);
+                tagStatsForTopic[tag] = {
+                    available: tagQuestions.length,
+                    selected: selected.length,
+                    requested: countForThisTag
+                };
+            }
+            
+            selectedQuestions.push(...topicQuestions);
+            topicStats[topicName] = {
+                questionsSelected: topicQuestions.length,
+                requested: countForThisTopic,
+                tags: tagStatsForTopic,
+                totalTags: tags.length
+            };
+        }
+        
+        // Shuffle final questions to randomize order
+        const finalQuestions = selectedQuestions.sort(() => Math.random() - 0.5);
+        
+        res.json({
+            success: true,
+            data: {
+                questions: finalQuestions,
+                count: finalQuestions.length,
+                requested: numQuestions,
+                classLevel: parseInt(classLevel),
+                type: type,
+                topicDistribution: topicStats,
+                totalTopics: topics.length
+            }
+        });
+    } catch (error) {
+        console.error('Get questions by class and type error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error fetching questions', 
+            error: error.message 
+        });
+    }
+};
+
 module.exports = {
     generateQuestions,
     getAllQuestions,
@@ -1767,5 +2037,8 @@ module.exports = {
     deleteQuestion,
     bulkDeleteQuestions,
     deleteAllQuestionsByFilter,
-    deleteAllQuestions
+    deleteAllQuestions,
+    getQuestionsByTagAndClass,
+    getRandomQuestionsByTopic,
+    getQuestionsByClassAndType
 };

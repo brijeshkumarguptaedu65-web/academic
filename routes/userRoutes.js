@@ -23,6 +23,11 @@ const {
     getTopicsForClass,
     getTopicTagsWithConcepts
 } = require('../controllers/userProfileController');
+const {
+    getQuestionsByTagAndClass,
+    getRandomQuestionsByTopic,
+    getQuestionsByClassAndType
+} = require('../controllers/adminQuestionController');
 
 // Public routes - Registration flow
 router.post('/register', registerUser);
@@ -51,5 +56,10 @@ router.post('/quiz/submit', protect, submitQuiz);
 router.get('/quiz/history', protect, getQuizHistory);
 router.get('/quiz/attempt/:attemptId', protect, getQuizAttempt);
 router.get('/progress', protect, getUserProgress);
+
+// Protected routes - Question Retrieval
+router.get('/questions/by-tag-class', protect, getQuestionsByTagAndClass); // Get questions by tag and class
+router.get('/questions/random-by-topic', protect, getRandomQuestionsByTopic); // Get random questions by topic (equal distribution across tags)
+router.get('/questions/by-class-type', protect, getQuestionsByClassAndType); // Get questions by class and type (equal distribution across topics and tags)
 
 module.exports = router;

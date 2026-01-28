@@ -88,7 +88,10 @@ const {
     deleteQuestion,
     bulkDeleteQuestions,
     deleteAllQuestionsByFilter,
-    deleteAllQuestions
+    deleteAllQuestions,
+    getQuestionsByTagAndClass,
+    getRandomQuestionsByTopic,
+    getQuestionsByClassAndType
 } = require('../controllers/adminQuestionController');
 
 // All routes protected + admin only
@@ -184,6 +187,9 @@ router.post('/curriculum/sync-topic-tag-mappings', syncAllTopicTagMappings); // 
 // 2.11 Question Management (AI-powered generation with admin approval)
 router.post('/questions/generate', generateQuestions); // Generate questions for a tag
 router.get('/questions', getAllQuestions); // Get all questions with filters
+router.get('/questions/by-tag-class', getQuestionsByTagAndClass); // Get questions by tag and class
+router.get('/questions/random-by-topic', getRandomQuestionsByTopic); // Get random questions by topic (equal distribution across tags)
+router.get('/questions/by-class-type', getQuestionsByClassAndType); // Get questions by class and type (equal distribution across topics and tags)
 router.put('/questions/bulk-approve', bulkApproveQuestions); // Bulk approve questions
 router.put('/questions/bulk-reject', bulkRejectQuestions); // Bulk reject questions
 router.delete('/questions/bulk-delete', bulkDeleteQuestions); // Bulk delete questions by IDs
