@@ -20,7 +20,7 @@ This document describes the APIs for retrieving questions from the database. The
 
 ## 1. Get Questions by Tag and Class
 
-Retrieves all approved questions for a specific tag and class level.
+Retrieves questions for a specific tag and class level. By default, returns all questions (including pending/rejected). Use `statusFilter=approve` to get only approved questions.
 
 ### Endpoint
 
@@ -33,6 +33,7 @@ Retrieves all approved questions for a specific tag and class level.
 |-----------|------|----------|-------------|
 | `tag` | string | Yes | The tag name to filter questions |
 | `classLevel` | number | Yes | The class level (e.g., 1, 2, 3, etc.) |
+| `statusFilter` | string | No | Filter by status: `"approve"` or `"approved"` = only approved questions, `"all"` or omitted = all questions (including pending/rejected). **Note:** For user routes, default behavior is `"all"` (shows all questions). Pass `"approve"` to see only approved questions. |
 
 ### Response
 
@@ -62,7 +63,8 @@ Retrieves all approved questions for a specific tag and class level.
     ],
     "count": 1,
     "tag": "Adds two single-digit numbers",
-    "classLevel": 1
+    "classLevel": 1,
+    "statusFilter": "all"
   }
 }
 ```
@@ -78,8 +80,12 @@ Retrieves all approved questions for a specific tag and class level.
 ### Example Request
 
 ```bash
-# User API
+# User API - Get all questions (including pending/rejected)
 curl -X GET "https://academic-7mkg.onrender.com/api/user/questions/by-tag-class?tag=Adds%20two%20single-digit%20numbers&classLevel=1" \
+  -H "Authorization: Bearer YOUR_USER_TOKEN"
+
+# User API - Get only approved questions
+curl -X GET "https://academic-7mkg.onrender.com/api/user/questions/by-tag-class?tag=Adds%20two%20single-digit%20numbers&classLevel=1&statusFilter=approve" \
   -H "Authorization: Bearer YOUR_USER_TOKEN"
 
 # Admin API
@@ -89,7 +95,9 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/questions/by-tag-class
 
 ### Notes
 
-- Only returns **approved** questions
+- **Status Filtering:** 
+  - For **user routes**: If `statusFilter=approve` or `statusFilter=approved`, only returns approved questions. Otherwise (or if `statusFilter=all`), returns all questions including pending and rejected.
+  - For **admin routes**: Always returns all questions unless `statusFilter=approve` is explicitly set.
 - Questions are sorted by creation date (newest first)
 - Returns all questions matching the tag and class, regardless of topic
 
@@ -112,6 +120,7 @@ Retrieves a specified number of random questions for a given class, topic, and t
 | `topicName` | string | Yes | The topic name (e.g., "Addition", "Subtraction", "Mensuration") |
 | `type` | string | Yes | Question type: `"BASIC_CALCULATION"` or `"SUBJECT"` |
 | `numberOfQuestions` | number | Yes | Total number of questions to retrieve |
+| `statusFilter` | string | No | Filter by status: `"approve"` or `"approved"` = only approved questions, `"all"` or omitted = all questions (including pending/rejected). **Note:** For user routes, default behavior is `"all"` (shows all questions). Pass `"approve"` to see only approved questions. |
 
 ### Response
 
@@ -201,8 +210,12 @@ Retrieves a specified number of random questions for a given class, topic, and t
 ### Example Request
 
 ```bash
-# User API - Get 30 random questions for Class 1, Addition topic, BASIC_CALCULATION type
+# User API - Get 30 random questions for Class 1, Addition topic, BASIC_CALCULATION type (all statuses)
 curl -X GET "https://academic-7mkg.onrender.com/api/user/questions/random-by-topic?classLevel=1&topicName=Addition&type=BASIC_CALCULATION&numberOfQuestions=30" \
+  -H "Authorization: Bearer YOUR_USER_TOKEN"
+
+# User API - Get only approved questions
+curl -X GET "https://academic-7mkg.onrender.com/api/user/questions/random-by-topic?classLevel=1&topicName=Addition&type=BASIC_CALCULATION&numberOfQuestions=30&statusFilter=approve" \
   -H "Authorization: Bearer YOUR_USER_TOKEN"
 
 # Admin API - Get 20 random questions for Class 5, Mensuration topic, SUBJECT type
@@ -220,7 +233,9 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/questions/random-by-to
 
 ### Notes
 
-- Only returns **approved** questions
+- **Status Filtering:** 
+  - For **user routes**: If `statusFilter=approve` or `statusFilter=approved`, only returns approved questions. Otherwise (or if `statusFilter=all`), returns all questions including pending and rejected.
+  - For **admin routes**: Always returns all questions unless `statusFilter=approve` is explicitly set.
 - **No tag is skipped** - all tags get at least one question if available
 - If a tag has fewer questions than requested, all available questions from that tag are returned
 - Questions are randomly selected and shuffled for variety
@@ -230,7 +245,7 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/questions/random-by-to
 
 ## 3. Get Questions by Class and Type
 
-Retrieves a specified number of questions for a given class and type. Questions are distributed **equally across all topics**, and within each topic, **equally across all tags**.
+Retrieves a specified number of questions for a given class and type. Questions are distributed **equally across all topics**, and within each topic, **equally across all tags**. By default, returns all questions (including pending/rejected). Use `statusFilter=approve` to get only approved questions.
 
 ### Endpoint
 
@@ -244,6 +259,7 @@ Retrieves a specified number of questions for a given class and type. Questions 
 | `classLevel` | number | Yes | The class level (e.g., 1, 2, 3, etc.) |
 | `type` | string | Yes | Question type: `"BASIC_CALCULATION"` or `"SUBJECT"` |
 | `numberOfQuestions` | number | Yes | Total number of questions to retrieve |
+| `statusFilter` | string | No | Filter by status: `"approve"` or `"approved"` = only approved questions, `"all"` or omitted = all questions (including pending/rejected). **Note:** For user routes, default behavior is `"all"` (shows all questions). Pass `"approve"` to see only approved questions. |
 
 ### Response
 
@@ -363,8 +379,12 @@ Retrieves a specified number of questions for a given class and type. Questions 
 ### Example Request
 
 ```bash
-# User API - Get 30 questions for Class 1, BASIC_CALCULATION type
+# User API - Get 30 questions for Class 1, BASIC_CALCULATION type (all statuses)
 curl -X GET "https://academic-7mkg.onrender.com/api/user/questions/by-class-type?classLevel=1&type=BASIC_CALCULATION&numberOfQuestions=30" \
+  -H "Authorization: Bearer YOUR_USER_TOKEN"
+
+# User API - Get only approved questions
+curl -X GET "https://academic-7mkg.onrender.com/api/user/questions/by-class-type?classLevel=1&type=BASIC_CALCULATION&numberOfQuestions=30&statusFilter=approve" \
   -H "Authorization: Bearer YOUR_USER_TOKEN"
 
 # Admin API - Get 45 questions for Class 5, SUBJECT type
@@ -386,7 +406,9 @@ curl -X GET "https://academic-7mkg.onrender.com/api/admin/questions/by-class-typ
 
 ### Notes
 
-- Only returns **approved** questions
+- **Status Filtering:** 
+  - For **user routes**: If `statusFilter=approve` or `statusFilter=approved`, only returns approved questions. Otherwise (or if `statusFilter=all`), returns all questions including pending and rejected.
+  - For **admin routes**: Always returns all questions unless `statusFilter=approve` is explicitly set.
 - **Equal distribution across topics** - each topic gets approximately the same number of questions
 - **Equal distribution across tags within each topic** - each tag gets approximately the same number of questions
 - If a topic/tag has fewer questions than requested, all available questions are returned

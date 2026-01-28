@@ -1764,7 +1764,7 @@ const deleteAllQuestions = async (req, res) => {
 // API 1: Get questions by tag and class
 const getQuestionsByTagAndClass = async (req, res) => {
     try {
-        let { tag, classLevel } = req.query;
+        let { tag, classLevel, statusFilter } = req.query;
         
         if (!tag || !classLevel) {
             return res.status(400).json({ 
@@ -1784,10 +1784,20 @@ const getQuestionsByTagAndClass = async (req, res) => {
         // Determine if user is admin (check req.user.role or req.route.path)
         const isAdmin = req.user && req.user.role === 'admin';
         
+        // Determine status filter: 'approve' = only approved, 'all' or undefined = all statuses
+        // For user routes: if statusFilter='approve', only show approved; otherwise show all
+        // For admin routes: always show all unless explicitly filtered
+        const onlyApproved = (statusFilter === 'approve' || statusFilter === 'approved') && !isAdmin;
+        
         // Build base query
         const baseQuery = {
             classLevel: classLevelInt
         };
+        
+        // Add status filter if needed
+        if (onlyApproved) {
+            baseQuery.status = 'approved';
+        }
         
         // First, try exact tag match
         let tagQuery = { tag: tag };
@@ -1814,11 +1824,6 @@ const getQuestionsByTagAndClass = async (req, res) => {
             .select('-approvedBy -rejectedBy -rejectedAt -rejectionReason -generationBatch')
             .sort({ createdAt: -1 })
             .lean();
-        }
-        
-        // Filter by status: Admin can see all, User only approved
-        if (!isAdmin) {
-            questions = questions.filter(q => q.status === 'approved');
         }
         
         // Debug: Log what we're searching for and what we found
@@ -1908,7 +1913,7 @@ const getQuestionsByTagAndClass = async (req, res) => {
 // API 2: Get random questions by class, topic, type, and number (equal distribution across tags)
 const getRandomQuestionsByTopic = async (req, res) => {
     try {
-        const { classLevel, topicName, type, numberOfQuestions } = req.query;
+        const { classLevel, topicName, type, numberOfQuestions, statusFilter } = req.query;
         
         if (!classLevel || !topicName || !type || !numberOfQuestions) {
             return res.status(400).json({ 
@@ -1925,13 +1930,25 @@ const getRandomQuestionsByTopic = async (req, res) => {
             });
         }
         
+        // Determine if user is admin
+        const isAdmin = req.user && req.user.role === 'admin';
+        
+        // Determine status filter: 'approve' = only approved, 'all' or undefined = all statuses
+        // For user routes: if statusFilter='approve', only show approved; otherwise show all
+        // For admin routes: always show all unless explicitly filtered
+        const onlyApproved = (statusFilter === 'approve' || statusFilter === 'approved') && !isAdmin;
+        
         // Build base query
         const baseQuery = {
             classLevel: parseInt(classLevel),
             topicName: topicName,
-            type: type,
-            status: 'approved'
+            type: type
         };
+        
+        // Add status filter if needed
+        if (onlyApproved) {
+            baseQuery.status = 'approved';
+        }
         
         // Get all unique tags for this topic, class, and type
         const tags = await Question.distinct('tag', baseQuery);
@@ -1942,7 +1959,7 @@ const getRandomQuestionsByTopic = async (req, res) => {
                 data: {
                     questions: [],
                     count: 0,
-                    message: `No approved questions found for Class ${classLevel}, Topic: ${topicName}, Type: ${type}`
+                    message: `No questions found for Class ${classLevel}, Topic: ${topicName}, Type: ${type}${onlyApproved ? ' (approved only)' : ''}`
                 }
             });
         }
@@ -1990,7 +2007,8 @@ const getRandomQuestionsByTopic = async (req, res) => {
                 topicName: topicName,
                 type: type,
                 tagDistribution: tagStats,
-                totalTags: tags.length
+                totalTags: tags.length,
+                statusFilter: onlyApproved ? 'approved' : 'all'
             }
         });
     } catch (error) {
@@ -2006,7 +2024,7 @@ const getRandomQuestionsByTopic = async (req, res) => {
 // API 3: Get questions by class, type, and number (equal distribution across topics, then tags)
 const getQuestionsByClassAndType = async (req, res) => {
     try {
-        const { classLevel, type, numberOfQuestions } = req.query;
+        const { classLevel, type, numberOfQuestions, statusFilter } = req.query;
         
         if (!classLevel || !type || !numberOfQuestions) {
             return res.status(400).json({ 
@@ -2023,12 +2041,24 @@ const getQuestionsByClassAndType = async (req, res) => {
             });
         }
         
+        // Determine if user is admin
+        const isAdmin = req.user && req.user.role === 'admin';
+        
+        // Determine status filter: 'approve' = only approved, 'all' or undefined = all statuses
+        // For user routes: if statusFilter='approve', only show approved; otherwise show all
+        // For admin routes: always show all unless explicitly filtered
+        const onlyApproved = (statusFilter === 'approve' || statusFilter === 'approved') && !isAdmin;
+        
         // Build base query
         const baseQuery = {
             classLevel: parseInt(classLevel),
-            type: type,
-            status: 'approved'
+            type: type
         };
+        
+        // Add status filter if needed
+        if (onlyApproved) {
+            baseQuery.status = 'approved';
+        }
         
         // Get all unique topics for this class and type
         const topics = await Question.distinct('topicName', baseQuery);
@@ -2039,7 +2069,7 @@ const getQuestionsByClassAndType = async (req, res) => {
                 data: {
                     questions: [],
                     count: 0,
-                    message: `No approved questions found for Class ${classLevel}, Type: ${type}`
+                    message: `No questions found for Class ${classLevel}, Type: ${type}${onlyApproved ? ' (approved only)' : ''}`
                 }
             });
         }
@@ -2116,7 +2146,8 @@ const getQuestionsByClassAndType = async (req, res) => {
                 classLevel: parseInt(classLevel),
                 type: type,
                 topicDistribution: topicStats,
-                totalTopics: topics.length
+                totalTopics: topics.length,
+                statusFilter: onlyApproved ? 'approved' : 'all'
             }
         });
     } catch (error) {
