@@ -1641,7 +1641,40 @@ const bulkDeleteQuestions = async (req, res) => {
 
 const deleteAllQuestionsByFilter = async (req, res) => {
     try {
-        const { tag, classLevel, topicName, status, type, subjectId } = req.body;
+        const { tag, classLevel, topicName, status, type, subjectId, deleteAll } = req.body;
+        
+        // Special flag to delete all questions (requires explicit confirmation)
+        if (deleteAll === true || deleteAll === 'true') {
+            const totalCount = await Question.countDocuments();
+            if (totalCount === 0) {
+                return res.json({ 
+                    success: true, 
+                    message: 'No questions to delete', 
+                    data: { deleted: 0, total: 0 } 
+                });
+            }
+            
+            const pendingCount = await Question.countDocuments({ status: 'pending' });
+            const approvedCount = await Question.countDocuments({ status: 'approved' });
+            const rejectedCount = await Question.countDocuments({ status: 'rejected' });
+            
+            const result = await Question.deleteMany({});
+            
+            return res.json({ 
+                success: true, 
+                message: `Deleted all ${result.deletedCount} questions`, 
+                data: { 
+                    deleted: result.deletedCount, 
+                    total: totalCount,
+                    breakdown: {
+                        pending: pendingCount,
+                        approved: approvedCount,
+                        rejected: rejectedCount
+                    }
+                } 
+            });
+        }
+        
         const query = {};
         if (tag) query.tag = tag;
         if (classLevel) query.classLevel = parseInt(classLevel);
@@ -1654,7 +1687,7 @@ const deleteAllQuestionsByFilter = async (req, res) => {
         if (Object.keys(query).length === 0) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'At least one filter parameter is required to prevent accidental deletion of all questions' 
+                message: 'At least one filter parameter is required to prevent accidental deletion of all questions. Use deleteAll: true to delete all questions.' 
             });
         }
         
@@ -1675,6 +1708,55 @@ const deleteAllQuestionsByFilter = async (req, res) => {
     }
 };
 
+// Delete ALL questions (requires explicit confirmation)
+const deleteAllQuestions = async (req, res) => {
+    try {
+        const { confirm } = req.body;
+        
+        // Require explicit confirmation
+        if (confirm !== true && confirm !== 'true') {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'This will delete ALL questions. Set confirm: true in request body to proceed.' 
+            });
+        }
+        
+        const totalCount = await Question.countDocuments();
+        
+        if (totalCount === 0) {
+            return res.json({ 
+                success: true, 
+                message: 'No questions to delete', 
+                data: { deleted: 0, total: 0 } 
+            });
+        }
+        
+        // Show breakdown before deletion
+        const pendingCount = await Question.countDocuments({ status: 'pending' });
+        const approvedCount = await Question.countDocuments({ status: 'approved' });
+        const rejectedCount = await Question.countDocuments({ status: 'rejected' });
+        
+        const result = await Question.deleteMany({});
+        
+        res.json({ 
+            success: true, 
+            message: `Deleted all ${result.deletedCount} questions`, 
+            data: { 
+                deleted: result.deletedCount, 
+                total: totalCount,
+                breakdown: {
+                    pending: pendingCount,
+                    approved: approvedCount,
+                    rejected: rejectedCount
+                }
+            } 
+        });
+    } catch (error) {
+        console.error('Delete all questions error:', error);
+        res.status(500).json({ success: false, message: 'Error deleting all questions', error: error.message });
+    }
+};
+
 module.exports = {
     generateQuestions,
     getAllQuestions,
@@ -1684,5 +1766,6 @@ module.exports = {
     bulkRejectQuestions,
     deleteQuestion,
     bulkDeleteQuestions,
-    deleteAllQuestionsByFilter
+    deleteAllQuestionsByFilter,
+    deleteAllQuestions
 };

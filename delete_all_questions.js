@@ -6,32 +6,18 @@
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const Question = require('./models/Question');
+const connectDB = require('./config/db');
 
 // Load environment variables (same as server.js)
 dotenv.config();
 
-const connectDB = async () => {
+const deleteAllQuestions = async () => {
     try {
-        if (!process.env.MONGO_URI) {
-            console.error('❌ Error: MONGO_URI is not set in environment variables');
-            console.error('   Please check your .env file');
-            process.exit(1);
-        }
-        
-        console.log('🔌 Connecting to MongoDB...');
-        const conn = await mongoose.connect(process.env.MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
-        console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+        await connectDB();
     } catch (err) {
-        console.error(`❌ Error: ${err.message}`);
+        console.error(`❌ Connection Error: ${err.message}`);
         process.exit(1);
     }
-};
-
-const deleteAllQuestions = async () => {
-    await connectDB();
     
     try {
         // Count total questions
