@@ -184,13 +184,13 @@ router.post('/curriculum/sync-topic-tag-mappings', syncAllTopicTagMappings); // 
 // 2.11 Question Management (AI-powered generation with admin approval)
 router.post('/questions/generate', generateQuestions); // Generate questions for a tag
 router.get('/questions', getAllQuestions); // Get all questions with filters
-router.put('/questions/:questionId/approve', approveQuestion); // Approve a single question
-router.put('/questions/:questionId/reject', rejectQuestion); // Reject a single question
 router.put('/questions/bulk-approve', bulkApproveQuestions); // Bulk approve questions
 router.put('/questions/bulk-reject', bulkRejectQuestions); // Bulk reject questions
-router.delete('/questions/:questionId', deleteQuestion); // Delete a single question
 router.delete('/questions/bulk-delete', bulkDeleteQuestions); // Bulk delete questions by IDs
 router.delete('/questions/delete-by-filter', deleteAllQuestionsByFilter); // Delete questions by filters
 router.delete('/questions/delete-all', deleteAllQuestions); // Delete ALL questions (requires confirm: true)
+router.put('/questions/:questionId/approve', approveQuestion); // Approve a single question
+router.put('/questions/:questionId/reject', rejectQuestion); // Reject a single question
+router.delete('/questions/:questionId', deleteQuestion); // Delete a single question
 
 module.exports = router;
